@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "id": "trigger-1",
+      "type": "trigger",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "data": {
+        "label": "Manual Trigger",
+        "description": "Manually trigger the workflow",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Manual"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "action-1",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 200
+      },
+      "data": {
+        "label": "Log Escalation",
+        "description": "Log the escalation event",
+        "type": "action",
+        "config": {
+          "actionType": "Log",
+          "message": "Escalation triggered"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "trigger-1",
+      "target": "action-1",
+      "type": "default"
+    }
+  ]
+}

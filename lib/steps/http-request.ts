@@ -1,0 +1,22 @@
+/**
+ * Executable step function for HTTP Request action
+ */
+import "server-only";
+
+export async function httpRequestStep(input: {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: unknown;
+}): Promise<unknown> {
+  "use step";
+
+  const response = await fetch(input.url, {
+    method: input.method,
+    headers: input.headers,
+    body: input.body ? JSON.stringify(input.body) : undefined,
+  });
+
+  const data = await response.json();
+  return data;
+}

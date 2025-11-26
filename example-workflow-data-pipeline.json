@@ -1,0 +1,137 @@
+{
+  "nodes": [
+    {
+      "id": "trigger-1",
+      "type": "trigger",
+      "position": {
+        "x": 100,
+        "y": 300
+      },
+      "data": {
+        "label": "Webhook Trigger",
+        "description": "Receive customer data via webhook",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Webhook"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "action-validate",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 150
+      },
+      "data": {
+        "label": "Validate Payload",
+        "description": "Validate incoming customer data",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "POST",
+          "url": "https://api.example.com/validate",
+          "body": "{{trigger.payload}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "action-enrich",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 300
+      },
+      "data": {
+        "label": "Enrich Customer",
+        "description": "Fetch additional data from CRM",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "GET",
+          "url": "https://api.example.com/customers/{{trigger.customerId}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "action-store",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 450
+      },
+      "data": {
+        "label": "Store in Database",
+        "description": "Persist customer record to Neon",
+        "type": "action",
+        "config": {
+          "actionType": "Database Query",
+          "query": "INSERT INTO customers (id, data) VALUES ($1, $2)",
+          "parameters": ["{{trigger.customerId}}", "{{enriched.data}}"]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "action-notify",
+      "type": "action",
+      "position": {
+        "x": 700,
+        "y": 300
+      },
+      "data": {
+        "label": "Send Confirmation",
+        "description": "Email confirmation to customer",
+        "type": "action",
+        "config": {
+          "actionType": "Send Email",
+          "to": "{{trigger.email}}",
+          "subject": "Welcome! Your account is ready",
+          "body": "Hi {{trigger.name}}, your data has been processed."
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-fan-1",
+      "source": "trigger-1",
+      "target": "action-validate",
+      "type": "default"
+    },
+    {
+      "id": "edge-fan-2",
+      "source": "trigger-1",
+      "target": "action-enrich",
+      "type": "default"
+    },
+    {
+      "id": "edge-fan-3",
+      "source": "trigger-1",
+      "target": "action-store",
+      "type": "default"
+    },
+    {
+      "id": "edge-join-1",
+      "source": "action-validate",
+      "target": "action-notify",
+      "type": "default"
+    },
+    {
+      "id": "edge-join-2",
+      "source": "action-enrich",
+      "target": "action-notify",
+      "type": "default"
+    },
+    {
+      "id": "edge-join-3",
+      "source": "action-store",
+      "target": "action-notify",
+      "type": "default"
+    }
+  ]
+}
