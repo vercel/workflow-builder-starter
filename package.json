@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm db:push && next build",
+    "build": "next build",
     "start": "next start",
     "setup": "pnpm install && pnpm db:push",
     "type-check": "tsc --noEmit",

@@ -88,8 +88,13 @@ const plugins = [
     : []),
 ];
 
+// Use a fallback secret during build/dev to suppress warnings
+// In production, BETTER_AUTH_SECRET must be set via environment variables
+const authSecret = process.env.BETTER_AUTH_SECRET || "dev-secret-change-in-production";
+
 export const auth = betterAuth({
   baseURL: getBaseURL(),
+  secret: authSecret,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
