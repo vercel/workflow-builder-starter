@@ -13,6 +13,8 @@ import {
   currentWorkflowIdAtom,
   edgesAtom,
   nodesAtom,
+  type WorkflowNode,
+  type WorkflowEdge,
 } from "@/lib/workflow-store";
 import exampleWorkflow from "../example-workflow.json";
 import exampleDataPipeline from "../example-workflow-data-pipeline.json";
@@ -44,16 +46,16 @@ const Home = () => {
           const operationsBridge = await api.workflow.create({
             name: "Sample Operations Bridge",
             description: "Linear escalation workflow - diagnostic alerts",
-            nodes: exampleWorkflow.nodes,
-            edges: exampleWorkflow.edges,
+            nodes: exampleWorkflow.nodes as WorkflowNode[],
+            edges: exampleWorkflow.edges as WorkflowEdge[],
           });
 
           // Create Data Pipeline (fan-out pattern)
           await api.workflow.create({
             name: "Data Pipeline Example",
             description: "Fan-out pattern - parallel processing with aggregation",
-            nodes: exampleDataPipeline.nodes,
-            edges: exampleDataPipeline.edges,
+            nodes: exampleDataPipeline.nodes as WorkflowNode[],
+            edges: exampleDataPipeline.edges as WorkflowEdge[],
           });
 
           // Redirect to Operations Bridge as the primary example
