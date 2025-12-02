@@ -1,9 +1,9 @@
 "use client";
 
-import { useAtom } from "jotai";
 import { Settings } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CodeEditor } from "@/components/ui/code-editor";
+import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,9 +14,12 @@ import {
 } from "@/components/ui/select";
 import { TemplateBadgeInput } from "@/components/ui/template-badge-input";
 import {
-  currentWorkflowIdAtom,
-  currentWorkflowNameAtom,
-} from "@/lib/workflow-store";
+  findActionById,
+  getActionsByCategory,
+  getAllIntegrations,
+} from "@/plugins";
+import { ActionConfigRenderer } from "./action-config-renderer";
+import { SchemaBuilder, type SchemaField } from "./schema-builder";
 
 type ActionConfigProps = {
   config: Record<string, unknown>;
@@ -24,11 +27,8 @@ type ActionConfigProps = {
   disabled: boolean;
 };
 
-/**
- * Log action fields - outputs a message to the console
- * The simplest possible action for debugging workflows
- */
-function LogFields({
+// Database Query fields component
+function DatabaseQueryFields({
   config,
   onUpdateConfig,
   disabled,
@@ -40,43 +40,47 @@ function LogFields({
   return (
     <>
       <div className="space-y-2">
-        <Label className="ml-1" htmlFor="logMessage">
-          Message
-        </Label>
-        <TemplateBadgeInput
-          disabled={disabled}
-          id="logMessage"
-          onChange={(value) => onUpdateConfig("logMessage", value)}
-          placeholder="Hello World! or {{NodeName.field}}"
-          value={(config?.logMessage as string) || ""}
-        />
+        <Label htmlFor="dbQuery">SQL Query</Label>
+        <div className="overflow-hidden rounded-md border">
+          <CodeEditor
+            defaultLanguage="sql"
+            height="150px"
+            onChange={(value) => onUpdateConfig("dbQuery", value || "")}
+            options={{
+              minimap: { enabled: false },
+              lineNumbers: "on",
+              scrollBeyondLastLine: false,
+              fontSize: 12,
+              readOnly: disabled,
+              wordWrap: "off",
+            }}
+            value={(config?.dbQuery as string) || ""}
+          />
+        </div>
+        <p className="text-muted-foreground text-xs">
+          The DATABASE_URL from your project integrations will be used to
+          execute this query.
+        </p>
       </div>
       <div className="space-y-2">
-        <Label className="ml-1" htmlFor="logLevel">
-          Level
-        </Label>
-        <Select
+        <Label>Schema (Optional)</Label>
+        <SchemaBuilder
           disabled={disabled}
-          onValueChange={(value) => onUpdateConfig("logLevel", value)}
-          value={(config?.logLevel as string) || "info"}
-        >
-          <SelectTrigger className="w-full" id="logLevel">
-            <SelectValue placeholder="Select level" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="info">Info</SelectItem>
-            <SelectItem value="warn">Warning</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-          </SelectContent>
-        </Select>
+          onChange={(schema) =>
+            onUpdateConfig("dbSchema", JSON.stringify(schema))
+          }
+          schema={
+            config?.dbSchema
+              ? (JSON.parse(config.dbSchema as string) as SchemaField[])
+              : []
+          }
+        />
       </div>
     </>
   );
 }
 
-/**
- * HTTP Request action fields
- */
+// HTTP Request fields component
 function HttpRequestFields({
   config,
   onUpdateConfig,
@@ -167,9 +171,7 @@ function HttpRequestFields({
   );
 }
 
-/**
- * Condition action fields - branch based on expression
- */
+// Condition fields component
 function ConditionFields({
   config,
   onUpdateConfig,
@@ -197,44 +199,82 @@ function ConditionFields({
   );
 }
 
-/**
- * Built-in action categories. Plugin actions are added via the plugin system.
- * Learners will build their first plugin (Resend) in the course.
- */
-const ACTION_CATEGORIES = {
-  System: ["Log", "HTTP Request", "Condition"],
-} as const;
+// System actions that don't have plugins
+const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
+  { id: "HTTP Request", label: "HTTP Request" },
+  { id: "Database Query", label: "Database Query" },
+  { id: "Condition", label: "Condition" },
+];
 
-type ActionCategory = keyof typeof ACTION_CATEGORIES;
+const SYSTEM_ACTION_IDS = SYSTEM_ACTIONS.map((a) => a.id);
 
-/**
- * Get category for an action type
- */
-const getCategoryForAction = (actionType: string): ActionCategory | null => {
-  for (const [category, actions] of Object.entries(ACTION_CATEGORIES)) {
-    if (actions.includes(actionType as never)) {
-      return category as ActionCategory;
+// Build category mapping dynamically from plugins + System
+function useCategoryData() {
+  return useMemo(() => {
+    const pluginCategories = getActionsByCategory();
+
+    // Build category map including System with both id and label
+    const allCategories: Record<
+      string,
+      Array<{ id: string; label: string }>
+    > = {
+      System: SYSTEM_ACTIONS,
+    };
+
+    for (const [category, actions] of Object.entries(pluginCategories)) {
+      allCategories[category] = actions.map((a) => ({
+        id: a.id,
+        label: a.label,
+      }));
     }
-  }
-  return null;
-};
 
-/**
- * Action configuration panel - displays fields based on selected action type
- */
+    return allCategories;
+  }, []);
+}
+
+// Get category for an action type (supports both new IDs, labels, and legacy labels)
+function getCategoryForAction(actionType: string): string | null {
+  // Check system actions first
+  if (SYSTEM_ACTION_IDS.includes(actionType)) {
+    return "System";
+  }
+
+  // Use findActionById which handles legacy labels from plugin registry
+  const action = findActionById(actionType);
+  if (action?.category) {
+    return action.category;
+  }
+
+  return null;
+}
+
+// Normalize action type to new ID format (handles legacy labels via findActionById)
+function normalizeActionType(actionType: string): string {
+  // Check system actions first - they use their label as ID
+  if (SYSTEM_ACTION_IDS.includes(actionType)) {
+    return actionType;
+  }
+
+  // Use findActionById which handles legacy labels and returns the proper ID
+  const action = findActionById(actionType);
+  if (action) {
+    return action.id;
+  }
+
+  return actionType;
+}
+
 export function ActionConfig({
   config,
   onUpdateConfig,
   disabled,
 }: ActionConfigProps) {
-  const [_workflowId] = useAtom(currentWorkflowIdAtom);
-  const [_workflowName] = useAtom(currentWorkflowNameAtom);
-
   const actionType = (config?.actionType as string) || "";
+  const categories = useCategoryData();
+  const integrations = useMemo(() => getAllIntegrations(), []);
+
   const selectedCategory = actionType ? getCategoryForAction(actionType) : null;
-  const [category, setCategory] = useState<ActionCategory | "">(
-    selectedCategory || ""
-  );
+  const [category, setCategory] = useState<string>(selectedCategory || "");
 
   // Sync category state when actionType changes (e.g., when switching nodes)
   useEffect(() => {
@@ -242,16 +282,26 @@ export function ActionConfig({
     setCategory(newCategory || "");
   }, [actionType]);
 
-  const handleCategoryChange = (newCategory: ActionCategory) => {
+  const handleCategoryChange = (newCategory: string) => {
     setCategory(newCategory);
     // Auto-select the first action in the new category
-    const firstAction = ACTION_CATEGORIES[newCategory][0];
-    onUpdateConfig("actionType", firstAction);
+    const firstAction = categories[newCategory]?.[0];
+    if (firstAction) {
+      onUpdateConfig("actionType", firstAction.id);
+    }
   };
 
   const handleActionTypeChange = (value: string) => {
     onUpdateConfig("actionType", value);
   };
+
+  // Adapter for plugin config components that expect (key, value: unknown)
+  const handlePluginUpdateConfig = (key: string, value: unknown) => {
+    onUpdateConfig(key, String(value));
+  };
+
+  // Get dynamic config fields for plugin actions
+  const pluginAction = actionType ? findActionById(actionType) : null;
 
   return (
     <>
@@ -262,9 +312,7 @@ export function ActionConfig({
           </Label>
           <Select
             disabled={disabled}
-            onValueChange={(value) =>
-              handleCategoryChange(value as ActionCategory)
-            }
+            onValueChange={handleCategoryChange}
             value={category || undefined}
           >
             <SelectTrigger className="w-full" id="actionCategory">
@@ -277,6 +325,17 @@ export function ActionConfig({
                   <span>System</span>
                 </div>
               </SelectItem>
+              {integrations.map((integration) => (
+                <SelectItem key={integration.type} value={integration.label}>
+                  <div className="flex items-center gap-2">
+                    <IntegrationIcon
+                      className="size-4"
+                      integration={integration.type}
+                    />
+                    <span>{integration.label}</span>
+                  </div>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -288,16 +347,16 @@ export function ActionConfig({
           <Select
             disabled={disabled || !category}
             onValueChange={handleActionTypeChange}
-            value={actionType || undefined}
+            value={normalizeActionType(actionType) || undefined}
           >
             <SelectTrigger className="w-full" id="actionType">
               <SelectValue placeholder="Select action" />
             </SelectTrigger>
             <SelectContent>
               {category &&
-                ACTION_CATEGORIES[category].map((action) => (
-                  <SelectItem key={action} value={action}>
-                    {action}
+                categories[category]?.map((action) => (
+                  <SelectItem key={action.id} value={action.id}>
+                    {action.label}
                   </SelectItem>
                 ))}
             </SelectContent>
@@ -305,16 +364,7 @@ export function ActionConfig({
         </div>
       </div>
 
-      {/* Log fields */}
-      {config?.actionType === "Log" && (
-        <LogFields
-          config={config}
-          disabled={disabled}
-          onUpdateConfig={onUpdateConfig}
-        />
-      )}
-
-      {/* HTTP Request fields */}
+      {/* System actions - hardcoded config fields */}
       {config?.actionType === "HTTP Request" && (
         <HttpRequestFields
           config={config}
@@ -323,12 +373,29 @@ export function ActionConfig({
         />
       )}
 
-      {/* Condition fields */}
+      {config?.actionType === "Database Query" && (
+        <DatabaseQueryFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      )}
+
       {config?.actionType === "Condition" && (
         <ConditionFields
           config={config}
           disabled={disabled}
           onUpdateConfig={onUpdateConfig}
+        />
+      )}
+
+      {/* Plugin actions - declarative config fields */}
+      {pluginAction && !SYSTEM_ACTION_IDS.includes(actionType) && (
+        <ActionConfigRenderer
+          config={config}
+          disabled={disabled}
+          fields={pluginAction.configFields}
+          onUpdateConfig={handlePluginUpdateConfig}
         />
       )}
     </>

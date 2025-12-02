@@ -36,7 +36,16 @@ const PLUGINS_MARKER_REGEX =
   /<!-- PLUGINS:START[^>]*-->[\s\S]*?<!-- PLUGINS:END -->/;
 
 // System integrations that don't have plugins
-const SYSTEM_INTEGRATION_TYPES = ["database"] as const;
+// Note: Includes legacy types for DB schema compatibility
+// When learners build plugins, they register via the plugin system
+const SYSTEM_INTEGRATION_TYPES = [
+  "database",
+  "resend",
+  "linear",
+  "slack",
+  "ai-gateway",
+  "firecrawl",
+] as const;
 
 // Regex patterns for codegen template generation
 const LEADING_WHITESPACE_PATTERN = /^\s*/;
