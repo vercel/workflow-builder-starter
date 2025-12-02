@@ -9,17 +9,12 @@
  * 2. Add a system integration to SYSTEM_INTEGRATION_TYPES in discover-plugins.ts
  * 3. Run: pnpm discover-plugins
  *
- * Generated types: ai-gateway, database, firecrawl, linear, resend, slack
+ * Generated types: database
  */
 
 // Integration type union - plugins + system integrations
 export type IntegrationType =
-  | "ai-gateway"
-  | "database"
-  | "firecrawl"
-  | "linear"
-  | "resend"
-  | "slack";
+  | "database";
 
 // Generic config type - plugins define their own keys via formFields[].configKey
 export type IntegrationConfig = Record<string, string | undefined>;
