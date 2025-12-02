@@ -253,7 +253,16 @@ export const PanelInner = () => {
 
   const handleUpdateConfig = (key: string, value: string) => {
     if (selectedNode) {
-      const newConfig = { ...selectedNode.data.config, [key]: value };
+      let newConfig = { ...selectedNode.data.config, [key]: value };
+
+      // Set defaults when actionType changes to HTTP Request
+      if (key === "actionType" && value === "HTTP Request") {
+        newConfig = {
+          ...newConfig,
+          httpMethod: newConfig.httpMethod || "POST",
+        };
+      }
+
       updateNodeData({ id: selectedNode.id, data: { config: newConfig } });
     }
   };
