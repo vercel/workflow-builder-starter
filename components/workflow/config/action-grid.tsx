@@ -1,24 +1,28 @@
 "use client";
 
-import { MessageSquare, Search, Settings, Zap } from "lucide-react";
-import { useState } from "react";
+import { Database, MessageSquare, Search, Settings, Zap } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { getAllActions } from "@/plugins";
 
 type ActionType = {
   id: string;
   label: string;
   description: string;
   category: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
+  integration?: string;
 };
 
 /**
- * Built-in actions only. Plugin actions are added via the plugin system.
+ * System actions that don't have plugins.
+ * Plugin actions are added dynamically via the plugin system.
  * Learners will build their first plugin (Resend) in the course.
  */
-const actions: ActionType[] = [
+const SYSTEM_ACTIONS: ActionType[] = [
   {
     id: "Log",
     label: "Log",
@@ -34,6 +38,13 @@ const actions: ActionType[] = [
     icon: Zap,
   },
   {
+    id: "Database Query",
+    label: "Database Query",
+    description: "Query your database",
+    category: "System",
+    icon: Database,
+  },
+  {
     id: "Condition",
     label: "Condition",
     description: "Branch based on a condition",
@@ -42,13 +53,46 @@ const actions: ActionType[] = [
   },
 ];
 
+/**
+ * Combine System actions with plugin actions
+ */
+function useAllActions(): ActionType[] {
+  return useMemo(() => {
+    const pluginActions = getAllActions();
+
+    // Map plugin actions to ActionType format
+    const mappedPluginActions: ActionType[] = pluginActions.map((action) => ({
+      id: action.id,
+      label: action.label,
+      description: action.description,
+      category: action.category,
+      integration: action.integration,
+    }));
+
+    return [...SYSTEM_ACTIONS, ...mappedPluginActions];
+  }, []);
+}
+
 type ActionGridProps = {
   onSelectAction: (actionType: string) => void;
   disabled?: boolean;
 };
 
+function ActionIcon({ action }: { action: ActionType }) {
+  if (action.integration) {
+    return (
+      <IntegrationIcon className="size-8" integration={action.integration} />
+    );
+  }
+  if (action.icon) {
+    return <action.icon className="size-8" />;
+  }
+  return <Zap className="size-8" />;
+}
+
 export function ActionGrid({ onSelectAction, disabled }: ActionGridProps) {
   const [filter, setFilter] = useState("");
+  const actions = useAllActions();
 
   const filteredActions = actions.filter((action) => {
     const searchTerm = filter.toLowerCase();
@@ -90,7 +134,7 @@ export function ActionGrid({ onSelectAction, disabled }: ActionGridProps) {
             onClick={() => onSelectAction(action.id)}
             type="button"
           >
-            <action.icon className="size-8" />
+            <ActionIcon action={action} />
             <p className="text-center font-medium text-sm">{action.label}</p>
           </button>
         ))}
