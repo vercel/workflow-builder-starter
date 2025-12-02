@@ -4,92 +4,83 @@
 import "server-only";
 
 import { getErrorMessage } from "../utils";
+import { type StepInput, withStepLogging } from "./step-handler";
 
 type HttpRequestResult =
   | { success: true; data: unknown; status: number }
   | { success: false; error: string; status?: number };
 
-/**
- * HTTP Request step
- * Accepts either UI config format (endpoint, httpMethod, httpBody) or
- * normalized format (url, method, body)
- */
-export async function httpRequestStep(input: {
-  // UI config format
-  endpoint?: string;
-  httpMethod?: string;
+export type HttpRequestInput = StepInput & {
+  endpoint: string;
+  httpMethod: string;
+  httpHeaders?: string;
   httpBody?: string;
-  httpHeaders?: string | Record<string, string>;
-  // Normalized format
-  url?: string;
-  method?: string;
-  headers?: Record<string, string>;
-  body?: unknown;
-}): Promise<HttpRequestResult> {
-  "use step";
+};
 
-  // Normalize input - support both UI config and direct format
-  const url = input.endpoint || input.url;
-  const method = input.httpMethod || input.method || "POST";
-
-  // Parse headers
-  let headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (input.httpHeaders) {
-    if (typeof input.httpHeaders === "string") {
-      try {
-        headers = { ...headers, ...JSON.parse(input.httpHeaders) };
-      } catch {
-        // Keep default headers
-      }
-    } else {
-      headers = { ...headers, ...input.httpHeaders };
-    }
-  } else if (input.headers) {
-    headers = { ...headers, ...input.headers };
+function parseHeaders(httpHeaders?: string): Record<string, string> {
+  if (!httpHeaders) {
+    return {};
   }
-
-  // Parse body
-  let body: string | undefined;
-  if (method !== "GET") {
-    if (input.httpBody) {
-      body = typeof input.httpBody === "string" ? input.httpBody : JSON.stringify(input.httpBody);
-    } else if (input.body) {
-      body = typeof input.body === "string" ? input.body : JSON.stringify(input.body);
-    }
+  try {
+    return JSON.parse(httpHeaders);
+  } catch {
+    return {};
   }
+}
 
-  if (!url) {
+function parseBody(httpMethod: string, httpBody?: string): string | undefined {
+  if (httpMethod === "GET" || !httpBody) {
+    return;
+  }
+  try {
+    const parsedBody = JSON.parse(httpBody);
+    return Object.keys(parsedBody).length > 0
+      ? JSON.stringify(parsedBody)
+      : undefined;
+  } catch {
+    const trimmed = httpBody.trim();
+    return trimmed && trimmed !== "{}" ? httpBody : undefined;
+  }
+}
+
+function parseResponse(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type");
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+  return response.text();
+}
+
+/**
+ * HTTP request logic
+ */
+async function httpRequest(
+  input: HttpRequestInput
+): Promise<HttpRequestResult> {
+  if (!input.endpoint) {
     return {
       success: false,
-      error: "URL is required for HTTP Request",
+      error: "HTTP request failed: URL is required",
     };
   }
 
   try {
-    const response = await fetch(url, {
-      method,
-      headers,
-      body,
+    const response = await fetch(input.endpoint, {
+      method: input.httpMethod,
+      headers: parseHeaders(input.httpHeaders),
+      body: parseBody(input.httpMethod, input.httpBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
       return {
         success: false,
-        error: `HTTP ${response.status}: ${errorText}`,
+        error: `HTTP request failed with status ${response.status}: ${errorText}`,
         status: response.status,
       };
     }
 
-    // Try JSON, fall back to text
-    const contentType = response.headers.get("content-type");
-    let data: unknown;
-    if (contentType?.includes("application/json")) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
-
+    const data = await parseResponse(response);
     return { success: true, data, status: response.status };
   } catch (error) {
     return {
@@ -97,4 +88,16 @@ export async function httpRequestStep(input: {
       error: `HTTP request failed: ${getErrorMessage(error)}`,
     };
   }
+}
+
+/**
+ * HTTP Request Step
+ * Makes an HTTP request to an endpoint
+ */
+// biome-ignore lint/suspicious/useAwait: workflow "use step" requires async
+export async function httpRequestStep(
+  input: HttpRequestInput
+): Promise<HttpRequestResult> {
+  "use step";
+  return withStepLogging(input, () => httpRequest(input));
 }

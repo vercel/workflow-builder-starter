@@ -15,7 +15,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "discover-plugins": "node scripts/discover-plugins.js",
+    "discover-plugins": "tsx scripts/discover-plugins.ts",
     "seed": "tsx scripts/seed-sample-workflow.ts"
   },
   "dependencies": {

@@ -3,6 +3,10 @@
  * This executor captures step executions through the workflow SDK for better observability
  */
 
+import {
+  preValidateConditionExpression,
+  validateConditionExpression,
+} from "@/lib/condition-validator";
 import { getErrorMessageAsync } from "./utils";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
 
@@ -119,38 +123,57 @@ async function executeActionStep(input: {
     if (typeof conditionExpression === "boolean") {
       evaluatedCondition = conditionExpression;
     } else if (typeof conditionExpression === "string") {
-      try {
-        const evalContext: Record<string, unknown> = {};
-        let transformedExpression = conditionExpression;
-        const templatePattern = /\{\{@([^:]+):([^}]+)\}\}/g;
-        const varCounter = { value: 0 };
-
-        transformedExpression = transformedExpression.replace(
-          templatePattern,
-          (match, nodeId, rest) =>
-            replaceTemplateVariable(
-              match,
-              nodeId,
-              rest,
-              evalContext,
-              varCounter
-            )
-        );
-
-        const varNames = Object.keys(evalContext);
-        const varValues = Object.values(evalContext);
-
-        const evalFunc = new Function(
-          ...varNames,
-          `return (${transformedExpression});`
-        );
-        const result = evalFunc(...varValues);
-        evaluatedCondition = Boolean(result);
-      } catch (error) {
-        console.error("[Condition] Failed to evaluate condition:", error);
+      // Pre-validate the expression before any processing
+      const preValidation = preValidateConditionExpression(conditionExpression);
+      if (!preValidation.valid) {
+        console.error("[Condition] Pre-validation failed:", preValidation.error);
         console.error("[Condition] Expression was:", conditionExpression);
-        // If evaluation fails, treat as false to be safe
         evaluatedCondition = false;
+      } else {
+        try {
+          const evalContext: Record<string, unknown> = {};
+          let transformedExpression = conditionExpression;
+          const templatePattern = /\{\{@([^:]+):([^}]+)\}\}/g;
+          const varCounter = { value: 0 };
+
+          transformedExpression = transformedExpression.replace(
+            templatePattern,
+            (match, nodeId, rest) =>
+              replaceTemplateVariable(
+                match,
+                nodeId,
+                rest,
+                evalContext,
+                varCounter
+              )
+          );
+
+          // Validate the transformed expression before evaluation
+          const validation = validateConditionExpression(transformedExpression);
+          if (!validation.valid) {
+            console.error("[Condition] Validation failed:", validation.error);
+            console.error("[Condition] Original expression:", conditionExpression);
+            console.error("[Condition] Transformed expression:", transformedExpression);
+            evaluatedCondition = false;
+          } else {
+            const varNames = Object.keys(evalContext);
+            const varValues = Object.values(evalContext);
+
+            // Safe to evaluate - expression has been validated
+            // Only contains: variables (__v0, __v1), operators, literals, and whitelisted methods
+            const evalFunc = new Function(
+              ...varNames,
+              `return (${transformedExpression});`
+            );
+            const result = evalFunc(...varValues);
+            evaluatedCondition = Boolean(result);
+          }
+        } catch (error) {
+          console.error("[Condition] Failed to evaluate condition:", error);
+          console.error("[Condition] Expression was:", conditionExpression);
+          // If evaluation fails, treat as false to be safe
+          evaluatedCondition = false;
+        }
       }
     } else {
       // Coerce to boolean for other types
