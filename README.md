@@ -6,22 +6,52 @@ A visual workflow builder for learning durable workflow patterns on Vercel.
 
 ### Option 1: Deploy to Vercel (Recommended)
 
-Click the deploy button in the course to deploy instantly. Database is provisioned automatically.
+Click the deploy button in the course. Database is provisioned automatically.
 
 ### Option 2: Local Development
 
-After deploying, clone for local development:
+After deploying, set up local dev:
+
+**1. Install Vercel CLI** (if not installed)
 
 ```bash
-# Clone your deployed repo
+npm i -g vercel
+```
+
+**2. Clone your deployed repo**
+
+```bash
 git clone <your-repo-url>
 cd workflow-builder-starter
+pnpm install
+```
 
-# Pull environment variables from Vercel
-vercel env pull
+**3. Link to your Vercel project**
 
-# Setup and run
-pnpm setup && pnpm dev
+```bash
+vercel link
+```
+
+Select your project when prompted.
+
+**4. Pull environment variables**
+
+```bash
+vercel env pull .env
+```
+
+This pulls DATABASE_URL and other env vars from your Vercel project.
+
+**5. Push database schema**
+
+```bash
+pnpm db:push
+```
+
+**6. Run dev server**
+
+```bash
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -29,9 +59,8 @@ Open [http://localhost:3000](http://localhost:3000).
 ## What You'll See
 
 - **Visual workflow canvas** — Drag-and-drop nodes connected by edges
-- **Pre-seeded workflow** — "Operations Bridge" scenario loads automatically
+- **Sample workflows** — "Hello Workflow" and "Data Pipeline" load automatically on first visit
 - **Execution logs** — Watch each step run with timing and output
-- **Integration nodes** — Preview mode (no API keys needed for Stage 0)
 
 ## Run the Workflow
 
@@ -40,28 +69,15 @@ Open [http://localhost:3000](http://localhost:3000).
 3. Click **Run** to execute
 4. Watch the logs show step-by-step execution
 
-## Course Progression
-
-This starter is **Stage 0**. The course guides you through:
-
-| Stage | What You'll Build |
-|-------|-------------------|
-| 0 | Deploy + Run + See (this starter) |
-| 1 | Trigger customization (webhooks, schedules) |
-| 2 | Data persistence (Neon/Postgres) |
-| 3 | Real integrations (Resend, etc.) |
-| 4 | Observability and AI assist |
-
 ## Development Scripts
 
 ```bash
 pnpm dev          # Start development server
-pnpm build        # Build for production (runs migrations)
+pnpm build        # Build for production (runs db:push first)
 pnpm db:push      # Push schema to database
 pnpm db:studio    # Open Drizzle Studio
 ```
 
 ## Learn More
 
-- [Visual Workflow Builder Course](https://vercel.com/docs)
 - [Vercel Workflow Documentation](https://useworkflow.dev/docs/introduction)

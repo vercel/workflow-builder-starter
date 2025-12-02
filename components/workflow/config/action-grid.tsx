@@ -1,18 +1,8 @@
 "use client";
 
-import {
-  Database,
-  Mail,
-  MessageSquare,
-  Search,
-  Settings,
-  Sparkles,
-  Ticket,
-  Zap,
-} from "lucide-react";
+import { MessageSquare, Search, Settings, Zap } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -22,10 +12,20 @@ type ActionType = {
   description: string;
   category: string;
   icon: React.ComponentType<{ className?: string }>;
-  integration?: "linear" | "resend" | "slack" | "vercel";
 };
 
+/**
+ * Built-in actions only. Plugin actions are added via the plugin system.
+ * Learners will build their first plugin (Resend) in the course.
+ */
 const actions: ActionType[] = [
+  {
+    id: "Log",
+    label: "Log",
+    description: "Output a message to the console",
+    category: "System",
+    icon: MessageSquare,
+  },
   {
     id: "HTTP Request",
     label: "HTTP Request",
@@ -34,66 +34,11 @@ const actions: ActionType[] = [
     icon: Zap,
   },
   {
-    id: "Database Query",
-    label: "Database Query",
-    description: "Query your database",
-    category: "System",
-    icon: Database,
-  },
-  {
     id: "Condition",
     label: "Condition",
     description: "Branch based on a condition",
     category: "System",
     icon: Settings,
-  },
-  {
-    id: "Send Email",
-    label: "Send Email",
-    description: "Send an email via Resend",
-    category: "Resend",
-    icon: Mail,
-    integration: "resend",
-  },
-  {
-    id: "Send Slack Message",
-    label: "Send Slack Message",
-    description: "Post a message to Slack",
-    category: "Slack",
-    icon: MessageSquare,
-    integration: "slack",
-  },
-  {
-    id: "Create Ticket",
-    label: "Create Ticket",
-    description: "Create a Linear ticket",
-    category: "Linear",
-    icon: Ticket,
-    integration: "linear",
-  },
-  {
-    id: "Find Issues",
-    label: "Find Issues",
-    description: "Search Linear issues",
-    category: "Linear",
-    icon: Ticket,
-    integration: "linear",
-  },
-  {
-    id: "Generate Text",
-    label: "Generate Text",
-    description: "Generate text with AI",
-    category: "AI Gateway",
-    icon: Sparkles,
-    integration: "vercel",
-  },
-  {
-    id: "Generate Image",
-    label: "Generate Image",
-    description: "Generate images with AI",
-    category: "AI Gateway",
-    icon: Sparkles,
-    integration: "vercel",
   },
 ];
 
@@ -145,14 +90,7 @@ export function ActionGrid({ onSelectAction, disabled }: ActionGridProps) {
             onClick={() => onSelectAction(action.id)}
             type="button"
           >
-            {action.integration ? (
-              <IntegrationIcon
-                className="size-8"
-                integration={action.integration}
-              />
-            ) : (
-              <action.icon className="size-8" />
-            )}
+            <action.icon className="size-8" />
             <p className="text-center font-medium text-sm">{action.label}</p>
           </button>
         ))}

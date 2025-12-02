@@ -2,6 +2,8 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   Copy,
   Eraser,
+  Eye,
+  EyeOff,
   FileCode,
   MenuIcon,
   RefreshCw,
@@ -26,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api-client";
 import { generateWorkflowCode } from "@/lib/workflow-codegen";
 import {
+  clearNodeStatusesAtom,
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
   deleteEdgeAtom,
@@ -48,6 +51,7 @@ import { IntegrationSelector } from "../ui/integration-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { ActionConfig } from "./config/action-config";
 import { ActionGrid } from "./config/action-grid";
+
 import { TriggerConfig } from "./config/trigger-config";
 import { generateNodeCode } from "./utils/code-generators";
 import { WorkflowRuns } from "./workflow-runs";
@@ -131,7 +135,7 @@ const MultiSelectionPanel = ({
 };
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex UI logic with multiple conditions
-const PanelInner = () => {
+export const PanelInner = () => {
   const [selectedNodeId] = useAtom(selectedNodeAtom);
   const [selectedEdgeId] = useAtom(selectedEdgeAtom);
   const [nodes] = useAtom(nodesAtom);
@@ -147,6 +151,7 @@ const PanelInner = () => {
   const deleteSelectedItems = useSetAtom(deleteSelectedItemsAtom);
   const setShowClearDialog = useSetAtom(showClearDialogAtom);
   const setShowDeleteDialog = useSetAtom(showDeleteDialogAtom);
+  const clearNodeStatuses = useSetAtom(clearNodeStatusesAtom);
   const [showDeleteNodeAlert, setShowDeleteNodeAlert] = useState(false);
   const [showDeleteEdgeAlert, setShowDeleteEdgeAlert] = useState(false);
   const [showDeleteRunsAlert, setShowDeleteRunsAlert] = useState(false);
@@ -200,6 +205,16 @@ const PanelInner = () => {
     }
   };
 
+  const handleToggleEnabled = () => {
+    if (selectedNode) {
+      const currentEnabled = selectedNode.data.enabled ?? true;
+      updateNodeData({
+        id: selectedNode.id,
+        data: { enabled: !currentEnabled },
+      });
+    }
+  };
+
   const handleDeleteEdge = () => {
     if (selectedEdgeId) {
       deleteEdge(selectedEdgeId);
@@ -214,7 +229,7 @@ const PanelInner = () => {
 
     try {
       await api.workflow.deleteExecutions(currentWorkflowId);
-      toast.success("All runs deleted");
+      clearNodeStatuses();
       setShowDeleteRunsAlert(false);
     } catch (error) {
       console.error("Failed to delete runs:", error);
@@ -611,14 +626,31 @@ const PanelInner = () => {
           </div>
           {selectedNode.data.type === "action" && (
             <div className="flex shrink-0 items-center justify-between border-t p-4">
-              <Button
-                onClick={() => setShowDeleteNodeAlert(true)}
-                size="sm"
-                variant="ghost"
-              >
-                <Trash2 className="mr-2 size-4" />
-                Delete Step
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleToggleEnabled}
+                  size="icon"
+                  title={
+                    selectedNode.data.enabled === false
+                      ? "Enable Step"
+                      : "Disable Step"
+                  }
+                  variant="ghost"
+                >
+                  {selectedNode.data.enabled === false ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </Button>
+                <Button
+                  onClick={() => setShowDeleteNodeAlert(true)}
+                  size="icon"
+                  variant="ghost"
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
 
               {(() => {
                 const actionType = selectedNode.data.config
@@ -631,6 +663,8 @@ const PanelInner = () => {
                   "Generate Text": "ai-gateway",
                   "Generate Image": "ai-gateway",
                   "Database Query": "database",
+                  Scrape: "firecrawl",
+                  Search: "firecrawl",
                 } as const;
 
                 const integrationType =

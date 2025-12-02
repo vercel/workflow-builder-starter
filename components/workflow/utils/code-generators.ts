@@ -1,15 +1,10 @@
 /**
  * Code generation utilities for workflow step functions
+ * Built-in templates only. Plugin templates are loaded dynamically.
  */
 
 import conditionTemplate from "@/lib/codegen-templates/condition";
-import createTicketTemplate from "@/lib/codegen-templates/create-ticket";
-import databaseQueryTemplate from "@/lib/codegen-templates/database-query";
-import generateImageTemplate from "@/lib/codegen-templates/generate-image";
-import generateTextTemplate from "@/lib/codegen-templates/generate-text";
 import httpRequestTemplate from "@/lib/codegen-templates/http-request";
-import sendEmailTemplate from "@/lib/codegen-templates/send-email";
-import sendSlackMessageTemplate from "@/lib/codegen-templates/send-slack-message";
 
 // Generate code snippet for a single node
 export const generateNodeCode = (node: {
@@ -59,21 +54,9 @@ export async function POST(request: NextRequest) {
   if (node.data.type === "action") {
     const actionType = node.data.config?.actionType as string;
 
-    // Map action types to templates
+    // Built-in templates only. Plugin steps are added via the plugin system.
+    // TODO: Add your plugin templates here in Lesson 3
     switch (actionType) {
-      case "Send Email":
-        return sendEmailTemplate;
-      case "Send Slack Message":
-        return sendSlackMessageTemplate;
-      case "Create Ticket":
-      case "Create Linear Issue":
-        return createTicketTemplate;
-      case "Generate Text":
-        return generateTextTemplate;
-      case "Generate Image":
-        return generateImageTemplate;
-      case "Database Query":
-        return databaseQueryTemplate;
       case "HTTP Request":
         return httpRequestTemplate;
       case "Condition":
@@ -81,7 +64,7 @@ export async function POST(request: NextRequest) {
       default:
         return `async function actionStep(input: Record<string, unknown>) {
   "use step";
-  
+
   console.log('Executing action');
   return { success: true };
 }`;

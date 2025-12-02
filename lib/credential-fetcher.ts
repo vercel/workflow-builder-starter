@@ -24,8 +24,8 @@ export type WorkflowCredentials = {
   LINEAR_TEAM_ID?: string;
   SLACK_API_KEY?: string;
   AI_GATEWAY_API_KEY?: string;
-  OPENAI_API_KEY?: string;
   DATABASE_URL?: string;
+  FIRECRAWL_API_KEY?: string;
 };
 
 function mapResendConfig(config: IntegrationConfig): WorkflowCredentials {
@@ -71,8 +71,13 @@ function mapAiGatewayConfig(config: IntegrationConfig): WorkflowCredentials {
   if (config.apiKey) {
     creds.AI_GATEWAY_API_KEY = config.apiKey;
   }
-  if (config.openaiApiKey) {
-    creds.OPENAI_API_KEY = config.openaiApiKey;
+  return creds;
+}
+
+function mapFirecrawlConfig(config: IntegrationConfig): WorkflowCredentials {
+  const creds: WorkflowCredentials = {};
+  if (config.firecrawlApiKey) {
+    creds.FIRECRAWL_API_KEY = config.firecrawlApiKey;
   }
   return creds;
 }
@@ -98,6 +103,9 @@ function mapIntegrationConfig(
   }
   if (integrationType === "ai-gateway") {
     return mapAiGatewayConfig(config);
+  }
+  if (integrationType === "firecrawl") {
+    return mapFirecrawlConfig(config);
   }
   return {};
 }

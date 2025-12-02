@@ -313,13 +313,17 @@ export function getStepInfo(actionType: string): {
         functionName: "generateImageStep",
         importPath: "./steps/generate-image-step",
       },
-      "Database Query": {
-        functionName: "databaseQueryStep",
-        importPath: "./steps/database-query-step",
-      },
       "HTTP Request": {
         functionName: "httpRequestStep",
         importPath: "./steps/http-request-step",
+      },
+      Scrape: {
+        functionName: "firecrawlScrapeStep",
+        importPath: "./steps/firecrawl",
+      },
+      Search: {
+        functionName: "firecrawlSearchStep",
+        importPath: "./steps/firecrawl",
       },
     };
 

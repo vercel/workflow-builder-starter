@@ -4,7 +4,6 @@ import { useAtom } from "jotai";
 import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CodeEditor } from "@/components/ui/code-editor";
-import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,12 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TemplateBadgeInput } from "@/components/ui/template-badge-input";
-import { TemplateBadgeTextarea } from "@/components/ui/template-badge-textarea";
 import {
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
 } from "@/lib/workflow-store";
-import { SchemaBuilder, type SchemaField } from "./schema-builder";
 
 type ActionConfigProps = {
   config: Record<string, unknown>;
@@ -27,8 +24,11 @@ type ActionConfigProps = {
   disabled: boolean;
 };
 
-// Send Email fields component
-function SendEmailFields({
+/**
+ * Log action fields - outputs a message to the console
+ * The simplest possible action for debugging workflows
+ */
+function LogFields({
   config,
   onUpdateConfig,
   disabled,
@@ -40,142 +40,33 @@ function SendEmailFields({
   return (
     <>
       <div className="space-y-2">
-        <Label className="ml-1" htmlFor="emailTo">
-          To (Email Address)
-        </Label>
-        <TemplateBadgeInput
-          disabled={disabled}
-          id="emailTo"
-          onChange={(value) => onUpdateConfig("emailTo", value)}
-          placeholder="user@example.com or {{NodeName.email}}"
-          value={(config?.emailTo as string) || ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="emailSubject">
-          Subject
-        </Label>
-        <TemplateBadgeInput
-          disabled={disabled}
-          id="emailSubject"
-          onChange={(value) => onUpdateConfig("emailSubject", value)}
-          placeholder="Subject or {{NodeName.title}}"
-          value={(config?.emailSubject as string) || ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="emailBody">
-          Body
-        </Label>
-        <TemplateBadgeTextarea
-          disabled={disabled}
-          id="emailBody"
-          onChange={(value) => onUpdateConfig("emailBody", value)}
-          placeholder="Email body. Use {{NodeName.field}} to insert data from previous nodes."
-          rows={4}
-          value={(config?.emailBody as string) || ""}
-        />
-      </div>
-    </>
-  );
-}
-
-// Send Slack Message fields component
-function SendSlackMessageFields({
-  config,
-  onUpdateConfig,
-  disabled,
-}: {
-  config: Record<string, unknown>;
-  onUpdateConfig: (key: string, value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="slackChannel">
-          Channel
-        </Label>
-        <TemplateBadgeInput
-          disabled={disabled}
-          id="slackChannel"
-          onChange={(value) => onUpdateConfig("slackChannel", value)}
-          placeholder="#general or @username or {{NodeName.channel}}"
-          value={(config?.slackChannel as string) || ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="slackMessage">
+        <Label className="ml-1" htmlFor="logMessage">
           Message
         </Label>
-        <TemplateBadgeTextarea
-          disabled={disabled}
-          id="slackMessage"
-          onChange={(value) => onUpdateConfig("slackMessage", value)}
-          placeholder="Your message. Use {{NodeName.field}} to insert data from previous nodes."
-          rows={4}
-          value={(config?.slackMessage as string) || ""}
-        />
-      </div>
-    </>
-  );
-}
-
-// Create Ticket fields component
-function CreateTicketFields({
-  config,
-  onUpdateConfig,
-  disabled,
-}: {
-  config: Record<string, unknown>;
-  onUpdateConfig: (key: string, value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="ticketTitle">
-          Ticket Title
-        </Label>
         <TemplateBadgeInput
           disabled={disabled}
-          id="ticketTitle"
-          onChange={(value) => onUpdateConfig("ticketTitle", value)}
-          placeholder="Bug report or {{NodeName.title}}"
-          value={(config?.ticketTitle as string) || ""}
+          id="logMessage"
+          onChange={(value) => onUpdateConfig("logMessage", value)}
+          placeholder="Hello World! or {{NodeName.field}}"
+          value={(config?.logMessage as string) || ""}
         />
       </div>
       <div className="space-y-2">
-        <Label className="ml-1" htmlFor="ticketDescription">
-          Description
-        </Label>
-        <TemplateBadgeTextarea
-          disabled={disabled}
-          id="ticketDescription"
-          onChange={(value) => onUpdateConfig("ticketDescription", value)}
-          placeholder="Description. Use {{NodeName.field}} to insert data from previous nodes."
-          rows={4}
-          value={(config?.ticketDescription as string) || ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="ticketPriority">
-          Priority
+        <Label className="ml-1" htmlFor="logLevel">
+          Level
         </Label>
         <Select
           disabled={disabled}
-          onValueChange={(value) => onUpdateConfig("ticketPriority", value)}
-          value={(config?.ticketPriority as string) || "2"}
+          onValueChange={(value) => onUpdateConfig("logLevel", value)}
+          value={(config?.logLevel as string) || "info"}
         >
-          <SelectTrigger className="w-full" id="ticketPriority">
-            <SelectValue placeholder="Select priority" />
+          <SelectTrigger className="w-full" id="logLevel">
+            <SelectValue placeholder="Select level" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="0">No Priority</SelectItem>
-            <SelectItem value="1">Urgent</SelectItem>
-            <SelectItem value="2">High</SelectItem>
-            <SelectItem value="3">Medium</SelectItem>
-            <SelectItem value="4">Low</SelectItem>
+            <SelectItem value="info">Info</SelectItem>
+            <SelectItem value="warn">Warning</SelectItem>
+            <SelectItem value="error">Error</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -183,134 +74,9 @@ function CreateTicketFields({
   );
 }
 
-// Find Issues fields component
-function FindIssuesFields({
-  config,
-  onUpdateConfig,
-  disabled,
-}: {
-  config: Record<string, unknown>;
-  onUpdateConfig: (key: string, value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="linearAssigneeId">
-          Assignee (User ID)
-        </Label>
-        <TemplateBadgeInput
-          disabled={disabled}
-          id="linearAssigneeId"
-          onChange={(value) => onUpdateConfig("linearAssigneeId", value)}
-          placeholder="user-id-123 or {{NodeName.userId}}"
-          value={(config?.linearAssigneeId as string) || ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="linearTeamId">
-          Team ID (optional)
-        </Label>
-        <TemplateBadgeInput
-          disabled={disabled}
-          id="linearTeamId"
-          onChange={(value) => onUpdateConfig("linearTeamId", value)}
-          placeholder="team-id-456 or {{NodeName.teamId}}"
-          value={(config?.linearTeamId as string) || ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="linearStatus">
-          Status (optional)
-        </Label>
-        <Select
-          disabled={disabled}
-          onValueChange={(value) => onUpdateConfig("linearStatus", value)}
-          value={(config?.linearStatus as string) || "any"}
-        >
-          <SelectTrigger className="w-full" id="linearStatus">
-            <SelectValue placeholder="Any status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any">Any</SelectItem>
-            <SelectItem value="backlog">Backlog</SelectItem>
-            <SelectItem value="todo">Todo</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="done">Done</SelectItem>
-            <SelectItem value="canceled">Canceled</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label className="ml-1" htmlFor="linearLabel">
-          Label (optional)
-        </Label>
-        <TemplateBadgeInput
-          disabled={disabled}
-          id="linearLabel"
-          onChange={(value) => onUpdateConfig("linearLabel", value)}
-          placeholder="bug, feature, etc. or {{NodeName.label}}"
-          value={(config?.linearLabel as string) || ""}
-        />
-      </div>
-    </>
-  );
-}
-
-// Database Query fields component
-function DatabaseQueryFields({
-  config,
-  onUpdateConfig,
-  disabled,
-}: {
-  config: Record<string, unknown>;
-  onUpdateConfig: (key: string, value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor="dbQuery">SQL Query</Label>
-        <div className="overflow-hidden rounded-md border">
-          <CodeEditor
-            defaultLanguage="sql"
-            height="150px"
-            onChange={(value) => onUpdateConfig("dbQuery", value || "")}
-            options={{
-              minimap: { enabled: false },
-              lineNumbers: "on",
-              scrollBeyondLastLine: false,
-              fontSize: 12,
-              readOnly: disabled,
-              wordWrap: "off",
-            }}
-            value={(config?.dbQuery as string) || ""}
-          />
-        </div>
-        <p className="text-muted-foreground text-xs">
-          The DATABASE_URL from your project integrations will be used to
-          execute this query.
-        </p>
-      </div>
-      <div className="space-y-2">
-        <Label>Schema (Optional)</Label>
-        <SchemaBuilder
-          disabled={disabled}
-          onChange={(schema) =>
-            onUpdateConfig("dbSchema", JSON.stringify(schema))
-          }
-          schema={
-            config?.dbSchema
-              ? (JSON.parse(config.dbSchema as string) as SchemaField[])
-              : []
-          }
-        />
-      </div>
-    </>
-  );
-}
-
-// HTTP Request fields component
+/**
+ * HTTP Request action fields
+ */
 function HttpRequestFields({
   config,
   onUpdateConfig,
@@ -401,139 +167,9 @@ function HttpRequestFields({
   );
 }
 
-// Generate Text fields component
-function GenerateTextFields({
-  config,
-  onUpdateConfig,
-  disabled,
-}: {
-  config: Record<string, unknown>;
-  onUpdateConfig: (key: string, value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor="aiFormat">Format</Label>
-        <Select
-          disabled={disabled}
-          onValueChange={(value) => onUpdateConfig("aiFormat", value)}
-          value={(config?.aiFormat as string) || "text"}
-        >
-          <SelectTrigger className="w-full" id="aiFormat">
-            <SelectValue placeholder="Select format" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="text">Text</SelectItem>
-            <SelectItem value="object">Object</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="aiModel">Model</Label>
-        <Select
-          disabled={disabled}
-          onValueChange={(value) => onUpdateConfig("aiModel", value)}
-          value={(config?.aiModel as string) || "gpt-5"}
-        >
-          <SelectTrigger className="w-full" id="aiModel">
-            <SelectValue placeholder="Select model" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="gpt-5">GPT-5</SelectItem>
-            <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-            <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-            <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-            <SelectItem value="claude-3-5-sonnet-20241022">
-              Claude 3.5 Sonnet
-            </SelectItem>
-            <SelectItem value="claude-3-5-haiku-20241022">
-              Claude 3.5 Haiku
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="aiPrompt">Prompt</Label>
-        <TemplateBadgeTextarea
-          disabled={disabled}
-          id="aiPrompt"
-          onChange={(value) => onUpdateConfig("aiPrompt", value)}
-          placeholder="Enter your prompt here. Use {{NodeName.field}} to reference previous outputs."
-          rows={4}
-          value={(config?.aiPrompt as string) || ""}
-        />
-      </div>
-      {config?.aiFormat === "object" && (
-        <div className="space-y-2">
-          <Label>Schema</Label>
-          <SchemaBuilder
-            disabled={disabled}
-            onChange={(schema) =>
-              onUpdateConfig("aiSchema", JSON.stringify(schema))
-            }
-            schema={
-              config?.aiSchema
-                ? (JSON.parse(config.aiSchema as string) as SchemaField[])
-                : []
-            }
-          />
-        </div>
-      )}
-    </>
-  );
-}
-
-// Generate Image fields component
-function GenerateImageFields({
-  config,
-  onUpdateConfig,
-  disabled,
-}: {
-  config: Record<string, unknown>;
-  onUpdateConfig: (key: string, value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor="imageModel">Model</Label>
-        <Select
-          disabled={disabled}
-          onValueChange={(value) => onUpdateConfig("imageModel", value)}
-          value={(config?.imageModel as string) || "openai/dall-e-3"}
-        >
-          <SelectTrigger className="w-full" id="imageModel">
-            <SelectValue placeholder="Select model" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="openai/dall-e-3">OpenAI DALL-E 3</SelectItem>
-            <SelectItem value="openai/dall-e-2">OpenAI DALL-E 2</SelectItem>
-            <SelectItem value="google/gemini-2.5-flash-image">
-              Google Gemini 2.5 Flash Image
-            </SelectItem>
-            <SelectItem value="google/gemini-2.5-flash-image-preview">
-              Google Gemini 2.5 Flash Image Preview
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="imagePrompt">Prompt</Label>
-        <TemplateBadgeTextarea
-          disabled={disabled}
-          id="imagePrompt"
-          onChange={(value) => onUpdateConfig("imagePrompt", value)}
-          placeholder="Describe the image you want to generate. Use {{NodeName.field}} to reference previous outputs."
-          rows={4}
-          value={(config?.imagePrompt as string) || ""}
-        />
-      </div>
-    </>
-  );
-}
-
-// Condition fields component
+/**
+ * Condition action fields - branch based on expression
+ */
 function ConditionFields({
   config,
   onUpdateConfig,
@@ -561,18 +197,19 @@ function ConditionFields({
   );
 }
 
-// Action categories and their actions
+/**
+ * Built-in action categories. Plugin actions are added via the plugin system.
+ * Learners will build their first plugin (Resend) in the course.
+ */
 const ACTION_CATEGORIES = {
-  System: ["HTTP Request", "Database Query", "Condition"],
-  "AI Gateway": ["Generate Text", "Generate Image"],
-  Linear: ["Create Ticket", "Find Issues"],
-  Resend: ["Send Email"],
-  Slack: ["Send Slack Message"],
+  System: ["Log", "HTTP Request", "Condition"],
 } as const;
 
 type ActionCategory = keyof typeof ACTION_CATEGORIES;
 
-// Get category for an action type
+/**
+ * Get category for an action type
+ */
 const getCategoryForAction = (actionType: string): ActionCategory | null => {
   for (const [category, actions] of Object.entries(ACTION_CATEGORIES)) {
     if (actions.includes(actionType as never)) {
@@ -582,7 +219,9 @@ const getCategoryForAction = (actionType: string): ActionCategory | null => {
   return null;
 };
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Component inherently complex due to multiple action types
+/**
+ * Action configuration panel - displays fields based on selected action type
+ */
 export function ActionConfig({
   config,
   onUpdateConfig,
@@ -638,30 +277,6 @@ export function ActionConfig({
                   <span>System</span>
                 </div>
               </SelectItem>
-              <SelectItem value="AI Gateway">
-                <div className="flex items-center gap-2">
-                  <IntegrationIcon className="size-4" integration="vercel" />
-                  <span>AI Gateway</span>
-                </div>
-              </SelectItem>
-              <SelectItem value="Linear">
-                <div className="flex items-center gap-2">
-                  <IntegrationIcon className="size-4" integration="linear" />
-                  <span>Linear</span>
-                </div>
-              </SelectItem>
-              <SelectItem value="Resend">
-                <div className="flex items-center gap-2">
-                  <IntegrationIcon className="size-4" integration="resend" />
-                  <span>Resend</span>
-                </div>
-              </SelectItem>
-              <SelectItem value="Slack">
-                <div className="flex items-center gap-2">
-                  <IntegrationIcon className="size-4" integration="slack" />
-                  <span>Slack</span>
-                </div>
-              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -690,45 +305,9 @@ export function ActionConfig({
         </div>
       </div>
 
-      {/* Send Email fields */}
-      {config?.actionType === "Send Email" && (
-        <SendEmailFields
-          config={config}
-          disabled={disabled}
-          onUpdateConfig={onUpdateConfig}
-        />
-      )}
-
-      {/* Send Slack Message fields */}
-      {config?.actionType === "Send Slack Message" && (
-        <SendSlackMessageFields
-          config={config}
-          disabled={disabled}
-          onUpdateConfig={onUpdateConfig}
-        />
-      )}
-
-      {/* Create Ticket fields */}
-      {config?.actionType === "Create Ticket" && (
-        <CreateTicketFields
-          config={config}
-          disabled={disabled}
-          onUpdateConfig={onUpdateConfig}
-        />
-      )}
-
-      {/* Find Issues fields */}
-      {config?.actionType === "Find Issues" && (
-        <FindIssuesFields
-          config={config}
-          disabled={disabled}
-          onUpdateConfig={onUpdateConfig}
-        />
-      )}
-
-      {/* Database Query fields */}
-      {config?.actionType === "Database Query" && (
-        <DatabaseQueryFields
+      {/* Log fields */}
+      {config?.actionType === "Log" && (
+        <LogFields
           config={config}
           disabled={disabled}
           onUpdateConfig={onUpdateConfig}
@@ -738,24 +317,6 @@ export function ActionConfig({
       {/* HTTP Request fields */}
       {config?.actionType === "HTTP Request" && (
         <HttpRequestFields
-          config={config}
-          disabled={disabled}
-          onUpdateConfig={onUpdateConfig}
-        />
-      )}
-
-      {/* Generate Text fields */}
-      {config?.actionType === "Generate Text" && (
-        <GenerateTextFields
-          config={config}
-          disabled={disabled}
-          onUpdateConfig={onUpdateConfig}
-        />
-      )}
-
-      {/* Generate Image fields */}
-      {config?.actionType === "Generate Image" && (
-        <GenerateImageFields
           config={config}
           disabled={disabled}
           onUpdateConfig={onUpdateConfig}

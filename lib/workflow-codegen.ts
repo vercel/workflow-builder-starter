@@ -1,11 +1,14 @@
+/**
+ * Code generation from workflow JSON to TypeScript
+ * Built-in actions only. Plugin generators are added via the plugin system.
+ */
+
 import {
   analyzeNodeUsage,
   buildAccessPath,
-  getStepInfo,
   removeInvisibleChars,
   TEMPLATE_PATTERN,
   toFriendlyVarName,
-  toTypeScriptLiteral,
 } from "./workflow-codegen-shared";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
 
@@ -21,7 +24,6 @@ type GeneratedCode = {
   imports: string[];
 };
 
-// Local constants not shared
 const CONST_ASSIGNMENT_PATTERN = /^(\s*)(const\s+\w+\s*=\s*)(.*)$/;
 
 /**
@@ -33,14 +35,10 @@ export function generateWorkflowCode(
   options: CodeGenOptions = {}
 ): GeneratedCode {
   const { functionName = "executeWorkflow" } = options;
-
-  // Analyze which node outputs are actually used
   const usedNodeOutputs = analyzeNodeUsage(nodes);
-
-  // Track required imports
   const imports = new Set<string>();
 
-  // Build a map of node connections
+  // Build node and edge maps
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const edgesBySource = new Map<string, string[]>();
   for (const edge of edges) {
@@ -49,34 +47,29 @@ export function generateWorkflowCode(
     edgesBySource.set(edge.source, targets);
   }
 
-  // Find trigger nodes (nodes with no incoming edges)
+  // Find trigger nodes
   const nodesWithIncoming = new Set(edges.map((e) => e.target));
   const triggerNodes = nodes.filter(
     (node) => node.data.type === "trigger" && !nodesWithIncoming.has(node.id)
   );
 
-  // Generate code for each node
   const codeLines: string[] = [];
   const visited = new Set<string>();
 
-  // Start function
   codeLines.push(`export async function ${functionName}() {`);
   codeLines.push(`  "use workflow";`);
   codeLines.push("");
 
-  // Build a map of nodeId to variable name for template references
+  // Build nodeId to varName map
   const nodeIdToVarName = new Map<string, string>();
   const usedVarNames = new Set<string>();
 
   for (const node of nodes) {
     let varName: string;
-
     if (node.data.type === "action") {
       const actionType = node.data.config?.actionType as string | undefined;
       const label = node.data.label || "";
       const baseVarName = toFriendlyVarName(label, actionType);
-
-      // Ensure uniqueness
       varName = baseVarName;
       let counter = 1;
       while (usedVarNames.has(varName)) {
@@ -85,20 +78,16 @@ export function generateWorkflowCode(
       }
       usedVarNames.add(varName);
     } else {
-      // For triggers, use a simple name
       varName = `${node.data.type}_${node.id.replace(/-/g, "_")}`;
     }
-
     nodeIdToVarName.set(node.id, varName);
   }
 
-  // Helper to process @nodeId:DisplayName.field format for template strings
+  // Template processing helpers
   function processAtFormat(trimmed: string, match: string): string {
     const withoutAt = trimmed.substring(1);
     const colonIndex = withoutAt.indexOf(":");
-    if (colonIndex === -1) {
-      return match;
-    }
+    if (colonIndex === -1) return match;
 
     const nodeId = withoutAt.substring(0, colonIndex);
     const rest = withoutAt.substring(colonIndex + 1);
@@ -106,19 +95,13 @@ export function generateWorkflowCode(
     const fieldPath = dotIndex !== -1 ? rest.substring(dotIndex + 1) : "";
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) {
-      return match; // Node not found, keep original
-    }
-
-    if (!fieldPath) {
-      return `\${${varName}}`;
-    }
+    if (!varName) return match;
+    if (!fieldPath) return `\${${varName}}`;
 
     const accessPath = buildAccessPath(fieldPath);
     return `\${${varName}${accessPath}}`;
   }
 
-  // Helper to process $nodeId.field format for template strings
   function processDollarFormat(trimmed: string, match: string): string {
     const withoutDollar = trimmed.substring(1);
     const parts = withoutDollar.split(".");
@@ -126,28 +109,17 @@ export function generateWorkflowCode(
     const fieldPath = parts.slice(1).join(".");
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) {
-      return match; // Node not found, keep original
-    }
-
-    if (!fieldPath) {
-      return `\${${varName}}`;
-    }
+    if (!varName) return match;
+    if (!fieldPath) return `\${${varName}}`;
 
     const accessPath = buildAccessPath(fieldPath);
     return `\${${varName}${accessPath}}`;
   }
 
-  // Helper to process @nodeId:DisplayName.field format for JavaScript expressions (not template strings)
-  function processAtFormatForExpression(
-    trimmed: string,
-    match: string
-  ): string {
+  function processAtFormatForExpression(trimmed: string, match: string): string {
     const withoutAt = trimmed.substring(1);
     const colonIndex = withoutAt.indexOf(":");
-    if (colonIndex === -1) {
-      return match;
-    }
+    if (colonIndex === -1) return match;
 
     const nodeId = withoutAt.substring(0, colonIndex);
     const rest = withoutAt.substring(colonIndex + 1);
@@ -155,347 +127,122 @@ export function generateWorkflowCode(
     const fieldPath = dotIndex !== -1 ? rest.substring(dotIndex + 1) : "";
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) {
-      return match; // Node not found, keep original
-    }
-
-    if (!fieldPath) {
-      return varName;
-    }
+    if (!varName) return match;
+    if (!fieldPath) return varName;
 
     const accessPath = buildAccessPath(fieldPath);
     return `${varName}${accessPath}`;
   }
 
-  // Helper to process $nodeId.field format for JavaScript expressions (not template strings)
-  function processDollarFormatForExpression(
-    trimmed: string,
-    match: string
-  ): string {
+  function processDollarFormatForExpression(trimmed: string, match: string): string {
     const withoutDollar = trimmed.substring(1);
     const parts = withoutDollar.split(".");
     const nodeId = parts[0];
     const fieldPath = parts.slice(1).join(".");
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) {
-      return match; // Node not found, keep original
-    }
-
-    if (!fieldPath) {
-      return varName;
-    }
+    if (!varName) return match;
+    if (!fieldPath) return varName;
 
     const accessPath = buildAccessPath(fieldPath);
     return `${varName}${accessPath}`;
   }
 
-  // Helper to convert template variables to JavaScript expressions for template strings
   function convertTemplateToJS(template: string): string {
-    if (!template || typeof template !== "string") {
-      return template;
-    }
+    if (!template || typeof template !== "string") return template;
 
     return template.replace(TEMPLATE_PATTERN, (match, expression) => {
       const trimmed = expression.trim();
-
-      if (trimmed.startsWith("@")) {
-        return processAtFormat(trimmed, match);
-      }
-
-      if (trimmed.startsWith("$")) {
-        return processDollarFormat(trimmed, match);
-      }
-
+      if (trimmed.startsWith("@")) return processAtFormat(trimmed, match);
+      if (trimmed.startsWith("$")) return processDollarFormat(trimmed, match);
       return match;
     });
   }
 
-  // Helper to convert template variables to JavaScript expressions (not template literal syntax)
   function convertConditionToJS(condition: string): string {
-    if (!condition || typeof condition !== "string") {
-      return condition;
-    }
+    if (!condition || typeof condition !== "string") return condition;
 
-    // First remove invisible characters (non-breaking spaces, etc.)
     const cleaned = removeInvisibleChars(condition);
-
-    // Then convert template references
     const converted = cleaned.replace(TEMPLATE_PATTERN, (match, expression) => {
       const trimmed = expression.trim();
-
-      if (trimmed.startsWith("@")) {
-        return processAtFormatForExpression(trimmed, match);
-      }
-
-      if (trimmed.startsWith("$")) {
-        return processDollarFormatForExpression(trimmed, match);
-      }
-
+      if (trimmed.startsWith("@")) return processAtFormatForExpression(trimmed, match);
+      if (trimmed.startsWith("$")) return processDollarFormatForExpression(trimmed, match);
       return match;
     });
 
-    // Final cleanup to ensure no non-breaking spaces remain
     return removeInvisibleChars(converted);
   }
 
-  // Helper functions to generate code for different action types
-  function generateEmailActionCode(
+  // ┌────────────────────────────────────────────────────────────────────────┐
+  // │ LESSON 3: Add your Resend plugin generator here                        │
+  // │                                                                        │
+  // │ function generateEmailActionCode(                                      │
+  // │   node: WorkflowNode,                                                  │
+  // │   indent: string,                                                      │
+  // │   varName: string                                                      │
+  // │ ): string[] { ... }                                                    │
+  // └────────────────────────────────────────────────────────────────────────┘
+
+  // ┌────────────────────────────────────────────────────────────────────────┐
+  // │ LESSON 6: Add your custom plugin generator here                        │
+  // │                                                                        │
+  // │ function generateSlackActionCode(...): string[] { ... }                │
+  // │ function generateStripeActionCode(...): string[] { ... }               │
+  // └────────────────────────────────────────────────────────────────────────┘
+
+  /**
+   * Generate code for Log action
+   */
+  function generateLogActionCode(
     node: WorkflowNode,
     indent: string,
     varName: string
   ): string[] {
-    const stepInfo = getStepInfo("Send Email");
-    imports.add(
-      `import { ${stepInfo.functionName} } from '${stepInfo.importPath}';`
-    );
-
     const config = node.data.config || {};
-    const emailTo = (config.emailTo as string) || "user@example.com";
-    const emailSubject = (config.emailSubject as string) || "Notification";
-    const emailBody = (config.emailBody as string) || "No content";
+    const message = (config.logMessage as string) || "Log executed";
+    const level = (config.logLevel as string) || "info";
 
-    const convertedEmailTo = convertTemplateToJS(emailTo);
-    const convertedSubject = convertTemplateToJS(emailSubject);
-    const convertedBody = convertTemplateToJS(emailBody);
+    const convertedMessage = convertTemplateToJS(message);
+    const hasTemplateRefs = convertedMessage.includes("${");
+    const escapeForOuter = (str: string) => str.replace(/\$\{/g, "$${");
 
-    // Check if template references are used (converted string contains ${)
-    const hasTemplateRefs = (str: string) => str.includes("${");
-
-    // Escape template expressions for the outer template literal (use $$ to escape $)
-    const escapeForOuterTemplate = (str: string) => str.replace(/\$\{/g, "$${");
-
-    // Build values - use template literals if references exist, otherwise use string literals
-    const emailToValue = hasTemplateRefs(convertedEmailTo)
-      ? `\`${escapeForOuterTemplate(convertedEmailTo).replace(/`/g, "\\`")}\``
-      : `'${emailTo.replace(/'/g, "\\'")}'`;
-    const subjectValue = hasTemplateRefs(convertedSubject)
-      ? `\`${escapeForOuterTemplate(convertedSubject).replace(/`/g, "\\`")}\``
-      : `'${emailSubject.replace(/'/g, "\\'")}'`;
-    const bodyValue = hasTemplateRefs(convertedBody)
-      ? `\`${escapeForOuterTemplate(convertedBody).replace(/`/g, "\\`")}\``
-      : `'${emailBody.replace(/'/g, "\\'")}'`;
+    const messageValue = hasTemplateRefs
+      ? `\`${escapeForOuter(convertedMessage).replace(/`/g, "\\`")}\``
+      : `'${message.replace(/'/g, "\\'")}'`;
 
     return [
-      `${indent}const ${varName} = await ${stepInfo.functionName}({`,
-      `${indent}  emailTo: ${emailToValue},`,
-      `${indent}  emailSubject: ${subjectValue},`,
-      `${indent}  emailBody: ${bodyValue},`,
+      `${indent}const ${varName} = await logStep({`,
+      `${indent}  message: ${messageValue},`,
+      `${indent}  level: '${level}',`,
       `${indent}});`,
     ];
   }
 
-  function generateTicketActionCode(indent: string, varName: string): string[] {
-    imports.add("import { createTicket } from './integrations/linear';");
-    return [
-      `${indent}const ${varName} = await createTicket({`,
-      `${indent}  title: 'New Ticket',`,
-      `${indent}  description: '',`,
-      `${indent}});`,
-    ];
-  }
-
-  function generateDatabaseActionCode(
-    node: WorkflowNode,
-    indent: string,
-    varName: string
-  ): string[] {
-    const stepInfo = getStepInfo("Database Query");
-    imports.add(
-      `import { ${stepInfo.functionName} } from '${stepInfo.importPath}';`
-    );
-
-    const config = node.data.config || {};
-    const dbQuery = (config.dbQuery as string) || "";
-    const dataSource = (config.dataSource as string) || "";
-    const tableName =
-      (config.dbTable as string) ||
-      (config.tableName as string) ||
-      "your_table";
-
-    const lines = [
-      `${indent}const ${varName} = await ${stepInfo.functionName}({`,
-    ];
-
-    // dataSource as an object
-    if (dataSource) {
-      lines.push(`${indent}  dataSource: { name: "${dataSource}" },`);
-    } else {
-      lines.push(`${indent}  dataSource: {},`);
-    }
-
-    // query: SQL query if provided, otherwise table name
-    if (dbQuery) {
-      // Convert template references in SQL query
-      const convertedQuery = convertTemplateToJS(dbQuery);
-      const hasTemplateRefs = convertedQuery.includes("${");
-
-      // Escape backticks and template literal syntax for SQL query
-      const escapeForOuterTemplate = (str: string) =>
-        str.replace(/\$\{/g, "$${");
-      const queryValue = hasTemplateRefs
-        ? `\`${escapeForOuterTemplate(convertedQuery).replace(/`/g, "\\`")}\``
-        : `\`${dbQuery.replace(/`/g, "\\`")}\``;
-
-      lines.push(`${indent}  query: ${queryValue},`);
-    } else {
-      // Use table name as query string
-      lines.push(`${indent}  query: "${tableName}",`);
-    }
-
-    lines.push(`${indent}});`);
-    return lines;
-  }
-
+  /**
+   * Generate code for HTTP Request action
+   */
   function generateHTTPActionCode(
-    indent: string,
-    varName: string,
-    endpoint?: string
-  ): string[] {
-    imports.add("import { callApi } from './integrations/api';");
-    return [
-      `${indent}const ${varName} = await callApi({`,
-      `${indent}  url: '${endpoint || "https://api.example.com/endpoint"}',`,
-      `${indent}  method: 'POST',`,
-      `${indent}  body: {},`,
-      `${indent}});`,
-    ];
-  }
-
-  // Helper to process AI schema and convert to TypeScript literal
-  function processAiSchema(aiSchema: string | undefined): string | null {
-    if (!aiSchema) {
-      return null;
-    }
-
-    try {
-      const parsedSchema = JSON.parse(aiSchema);
-      // Remove id field from each schema object
-      const schemaWithoutIds = Array.isArray(parsedSchema)
-        ? parsedSchema.map((field: Record<string, unknown>) => {
-            const { id: _id, ...rest } = field;
-            return rest;
-          })
-        : parsedSchema;
-      return toTypeScriptLiteral(schemaWithoutIds);
-    } catch {
-      // If schema is invalid JSON, skip it
-      return null;
-    }
-  }
-
-  // Helper to generate prompt value with template handling
-  function generatePromptValue(aiPrompt: string): string {
-    const convertedPrompt = convertTemplateToJS(aiPrompt);
-    const hasTemplateRefs = convertedPrompt.includes("${");
-    const escapeForOuterTemplate = (str: string) => str.replace(/\$\{/g, "$${");
-
-    if (hasTemplateRefs) {
-      return `\`${escapeForOuterTemplate(convertedPrompt).replace(/`/g, "\\`")}\``;
-    }
-    return `\`${aiPrompt.replace(/`/g, "\\`")}\``;
-  }
-
-  function generateAiTextActionCode(
     node: WorkflowNode,
     indent: string,
     varName: string
   ): string[] {
-    const stepInfo = getStepInfo("Generate Text");
-    imports.add(
-      `import { ${stepInfo.functionName} } from '${stepInfo.importPath}';`
-    );
-
     const config = node.data.config || {};
-    const aiPrompt = (config.aiPrompt as string) || "Generate a summary";
-    const aiModel = (config.aiModel as string) || "gpt-5";
-    const aiFormat = (config.aiFormat as string) || "text";
-    const aiSchema = config.aiSchema as string | undefined;
+    const endpoint = (config.endpoint as string) || "https://api.example.com/endpoint";
+    const method = (config.httpMethod as string) || "POST";
 
-    const promptValue = generatePromptValue(aiPrompt);
-
-    const lines = [
-      `${indent}// Generate text using AI`,
-      `${indent}const ${varName} = await ${stepInfo.functionName}({`,
-      `${indent}  model: "${aiModel}",`,
-      `${indent}  prompt: ${promptValue},`,
-    ];
-
-    if (aiFormat === "object") {
-      lines.push(`${indent}  format: "object",`);
-      const schemaString = processAiSchema(aiSchema);
-      if (schemaString) {
-        lines.push(`${indent}  schema: ${schemaString},`);
-      }
-    }
-
-    lines.push(`${indent}});`);
-    return lines;
-  }
-
-  function generateAiImageActionCode(
-    node: WorkflowNode,
-    indent: string,
-    varName: string
-  ): string[] {
-    imports.add("import { generateImage } from './integrations/ai';");
-    const imagePrompt =
-      (node.data.config?.imagePrompt as string) || "A beautiful landscape";
-    const imageModel =
-      (node.data.config?.imageModel as string) || "openai/dall-e-3";
+    imports.add("import { httpRequestStep } from './steps/http-request';");
 
     return [
-      `${indent}// Generate image using AI`,
-      `${indent}const ${varName} = await generateImage({`,
-      `${indent}  model: "${imageModel}",`,
-      `${indent}  prompt: \`${imagePrompt}\`,`,
+      `${indent}const ${varName} = await httpRequestStep({`,
+      `${indent}  url: '${endpoint}',`,
+      `${indent}  method: '${method}',`,
       `${indent}});`,
     ];
   }
 
-  function generateSlackActionCode(
-    node: WorkflowNode,
-    indent: string,
-    varName: string
-  ): string[] {
-    imports.add("import { sendSlackMessage } from './integrations/slack';");
-    const slackChannel =
-      (node.data.config?.slackChannel as string) || "#general";
-    const slackMessage =
-      (node.data.config?.slackMessage as string) || "Message content";
-
-    return [
-      `${indent}const ${varName} = await sendSlackMessage({`,
-      `${indent}  channel: "${slackChannel}",`,
-      `${indent}  text: "${slackMessage}",`,
-      `${indent}});`,
-    ];
-  }
-
-  function generateLinearActionCode(indent: string, varName: string): string[] {
-    imports.add("import { createLinearIssue } from './integrations/linear';");
-    return [
-      `${indent}const ${varName} = await createLinearIssue({`,
-      `${indent}  title: "Issue title",`,
-      `${indent}  description: "Issue description",`,
-      `${indent}});`,
-    ];
-  }
-
-  function generateFindIssuesActionCode(
-    indent: string,
-    varName: string
-  ): string[] {
-    imports.add("import { findIssues } from './integrations/linear';");
-    return [
-      `${indent}const ${varName} = await findIssues({`,
-      `${indent}  assigneeId: "user-id",`,
-      `${indent}  status: "in_progress",`,
-      `${indent}});`,
-    ];
-  }
-
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Action type routing requires many conditionals
+  /**
+   * Generate code for action nodes
+   */
   function generateActionNodeCode(
     node: WorkflowNode,
     nodeId: string,
@@ -503,10 +250,6 @@ export function generateWorkflowCode(
     varName: string
   ): string[] {
     const actionType = node.data.config?.actionType as string;
-    const endpoint = node.data.config?.endpoint as string;
-    const label = node.data.label.toLowerCase();
-
-    // Use label if available, otherwise fall back to action type
     const actionLabel = node.data.label || actionType || "Unknown Action";
     const lines: string[] = [`${indent}// Action: ${actionLabel}`];
 
@@ -514,130 +257,56 @@ export function generateWorkflowCode(
       lines.push(`${indent}// ${node.data.description}`);
     }
 
-    // Check if this node's output is used
     const outputIsUsed = usedNodeOutputs.has(nodeId);
 
-    // Helper to process a line with await statement
-    function processAwaitLine(line: string): string {
-      const match = CONST_ASSIGNMENT_PATTERN.exec(line);
-      if (match) {
-        const [, lineIndent, , rest] = match;
-        return `${lineIndent}${rest}`;
-      }
-      return line;
-    }
-
-    // Helper to process a line with const assignment
-    function processConstLine(line: string): string {
-      const match = CONST_ASSIGNMENT_PATTERN.exec(line);
-      if (match) {
-        const [, lineIndent, , rest] = match;
-        return `${lineIndent}void ${rest}`;
-      }
-      return line;
-    }
-
-    // Helper to remove variable assignment from action lines
     function removeVariableAssignment(actionLines: string[]): string[] {
-      const result: string[] = [];
-      for (const line of actionLines) {
-        if (line.includes("await")) {
-          result.push(processAwaitLine(line));
-        } else if (line.trim().startsWith("const") && line.includes("{")) {
-          result.push(processConstLine(line));
-        } else {
-          result.push(line);
+      return actionLines.map((line) => {
+        const match = CONST_ASSIGNMENT_PATTERN.exec(line);
+        if (match && line.includes("await")) {
+          const [, lineIndent, , rest] = match;
+          return `${lineIndent}${rest}`;
         }
-      }
-      return result;
+        if (match && line.trim().startsWith("const") && line.includes("{")) {
+          const [, lineIndent, , rest] = match;
+          return `${lineIndent}void ${rest}`;
+        }
+        return line;
+      });
     }
 
-    // Helper to conditionally wrap action call with variable assignment
     const wrapActionCall = (actionLines: string[]): string[] => {
-      if (outputIsUsed) {
-        // Keep variable assignment
-        return actionLines;
-      }
-      // Remove variable assignment, just call the function
-      return removeVariableAssignment(actionLines);
+      return outputIsUsed ? actionLines : removeVariableAssignment(actionLines);
     };
 
-    // Check explicit actionType first, then fall back to label matching
-    // Order matters: more specific types first
-    if (actionType === "Generate Text") {
-      lines.push(
-        ...wrapActionCall(generateAiTextActionCode(node, indent, varName))
-      );
-    } else if (actionType === "Generate Image") {
-      lines.push(
-        ...wrapActionCall(generateAiImageActionCode(node, indent, varName))
-      );
-    } else if (actionType === "Send Email") {
-      lines.push(
-        ...wrapActionCall(generateEmailActionCode(node, indent, varName))
-      );
-    } else if (actionType === "Send Slack Message") {
-      lines.push(
-        ...wrapActionCall(generateSlackActionCode(node, indent, varName))
-      );
-    } else if (actionType === "Create Ticket") {
-      lines.push(...wrapActionCall(generateTicketActionCode(indent, varName)));
-    } else if (actionType === "Create Linear Issue") {
-      lines.push(...wrapActionCall(generateLinearActionCode(indent, varName)));
-    } else if (actionType === "Find Issues") {
-      lines.push(
-        ...wrapActionCall(generateFindIssuesActionCode(indent, varName))
-      );
-    } else if (actionType === "Database Query") {
-      lines.push(
-        ...wrapActionCall(generateDatabaseActionCode(node, indent, varName))
-      );
-    } else if (actionType === "HTTP Request" || endpoint) {
-      lines.push(
-        ...wrapActionCall(generateHTTPActionCode(indent, varName, endpoint))
-      );
-    } else if (label.includes("generate text") && !label.includes("email")) {
-      // Fallback: check label but avoid matching "email" in labels
-      lines.push(
-        ...wrapActionCall(generateAiTextActionCode(node, indent, varName))
-      );
-    } else if (label.includes("generate image")) {
-      lines.push(
-        ...wrapActionCall(generateAiImageActionCode(node, indent, varName))
-      );
-    } else if (
-      label.includes("send email") ||
-      (label.includes("email") && !label.includes("generate"))
-    ) {
-      // Only match email if it doesn't contain "generate"
-      lines.push(
-        ...wrapActionCall(generateEmailActionCode(node, indent, varName))
-      );
-    } else if (label.includes("slack")) {
-      lines.push(
-        ...wrapActionCall(generateSlackActionCode(node, indent, varName))
-      );
-    } else if (label.includes("linear") || actionType === "linear") {
-      lines.push(...wrapActionCall(generateLinearActionCode(indent, varName)));
-    } else if (label.includes("database")) {
-      lines.push(
-        ...wrapActionCall(generateDatabaseActionCode(node, indent, varName))
-      );
-    } else if (label.includes("ticket")) {
-      lines.push(...wrapActionCall(generateTicketActionCode(indent, varName)));
-    } else if (label.includes("find issues")) {
-      lines.push(
-        ...wrapActionCall(generateFindIssuesActionCode(indent, varName))
-      );
-    } else if (outputIsUsed) {
-      lines.push(`${indent}const ${varName} = { status: 'success' };`);
-    } else {
-      lines.push(`${indent}void ({ status: 'success' });`);
+    // Built-in action types
+    // ┌──────────────────────────────────────────────────────────────────────┐
+    // │ LESSON 3: Add case "Send Email" here                                 │
+    // │ LESSON 6: Add your custom action case here                           │
+    // └──────────────────────────────────────────────────────────────────────┘
+    switch (actionType) {
+      case "Log":
+        imports.add("import { logStep } from './steps/log';");
+        lines.push(...wrapActionCall(generateLogActionCode(node, indent, varName)));
+        break;
+
+      case "HTTP Request":
+        lines.push(...wrapActionCall(generateHTTPActionCode(node, indent, varName)));
+        break;
+
+      default:
+        if (outputIsUsed) {
+          lines.push(`${indent}const ${varName} = { status: 'success' };`);
+        } else {
+          lines.push(`${indent}void ({ status: 'success' });`);
+        }
     }
 
     return lines;
   }
 
+  /**
+   * Generate code for condition nodes
+   */
   function generateConditionNodeCode(
     node: WorkflowNode,
     nodeId: string,
@@ -655,11 +324,7 @@ export function generateWorkflowCode(
     if (nextNodes.length > 0) {
       const trueNode = nextNodes[0];
       const falseNode = nextNodes[1];
-
-      // Convert template references in condition to JavaScript expressions (not template literal syntax)
-      const convertedCondition = condition
-        ? convertConditionToJS(condition)
-        : "true";
+      const convertedCondition = condition ? convertConditionToJS(condition) : "true";
 
       lines.push(`${indent}if (${convertedCondition}) {`);
       if (trueNode) {
@@ -679,88 +344,29 @@ export function generateWorkflowCode(
     return lines;
   }
 
-  // Helper to generate trigger node code
+  /**
+   * Generate code for trigger nodes
+   */
   function generateTriggerCode(
     node: WorkflowNode,
     nodeId: string,
     varName: string,
     indent: string
   ): string[] {
-    // Skip trigger code entirely if trigger outputs aren't used
-    if (!usedNodeOutputs.has(nodeId)) {
-      return [];
-    }
+    if (!usedNodeOutputs.has(nodeId)) return [];
 
     const lines: string[] = [];
     lines.push(`${indent}// Trigger: ${node.data.label}`);
     if (node.data.description) {
       lines.push(`${indent}// ${node.data.description}`);
     }
-
     lines.push(`${indent}const ${varName} = { triggered: true };`);
     return lines;
   }
 
-  // Helper to generate transform node code (no longer used but kept for backward compatibility)
-  function _generateTransformCode(
-    node: WorkflowNode,
-    varName: string,
-    indent: string
-  ): string[] {
-    const lines: string[] = [];
-    lines.push(`${indent}// Transform: ${node.data.label}`);
-    if (node.data.description) {
-      lines.push(`${indent}// ${node.data.description}`);
-    }
-    const transformType = node.data.config?.transformType as string;
-    lines.push(`${indent}// Transform type: ${transformType || "Map Data"}`);
-    lines.push(`${indent}const ${varName} = {`);
-    lines.push(`${indent}  transformed: true,`);
-    lines.push(`${indent}  timestamp: Date.now(),`);
-    lines.push(`${indent}};`);
-    return lines;
-  }
-
-  // Helper to process trigger node
-  function processTriggerNode(
-    node: WorkflowNode,
-    nodeId: string,
-    varName: string,
-    indent: string
-  ): { lines: string[]; wasSkipped: boolean } {
-    const triggerCode = generateTriggerCode(node, nodeId, varName, indent);
-    // If trigger was skipped (empty array), process next nodes
-    if (triggerCode.length === 0) {
-      const lines: string[] = [];
-      const nextNodes = edgesBySource.get(nodeId) || [];
-      for (const nextNodeId of nextNodes) {
-        const nextCode = generateNodeCode(nextNodeId, indent);
-        lines.push(...nextCode);
-      }
-      return { lines, wasSkipped: true };
-    }
-    return { lines: triggerCode, wasSkipped: false };
-  }
-
-  // Helper to process action node
-  function processActionNode(
-    node: WorkflowNode,
-    nodeId: string,
-    varName: string,
-    indent: string
-  ): string[] {
-    const lines: string[] = [];
-    const actionType = node.data.config?.actionType as string;
-    // Handle condition as an action type
-    if (actionType === "Condition") {
-      lines.push(...generateConditionNodeCode(node, nodeId, indent));
-      return lines;
-    }
-    lines.push(...generateActionNodeCode(node, nodeId, indent, varName));
-    return lines;
-  }
-
-  // Helper to process next nodes recursively
+  /**
+   * Process next nodes recursively
+   */
   function processNextNodes(
     nodeId: string,
     currentLines: string[],
@@ -769,7 +375,6 @@ export function generateWorkflowCode(
     const nextNodes = edgesBySource.get(nodeId) || [];
     const result = [...currentLines];
 
-    // Only add blank line if we actually generated code for this node AND there are more nodes
     if (currentLines.length > 0 && nextNodes.length > 0) {
       result.push("");
     }
@@ -782,7 +387,9 @@ export function generateWorkflowCode(
     return result;
   }
 
-  // Generate code for each node in the workflow
+  /**
+   * Generate code for a single node
+   */
   function generateNodeCode(nodeId: string, indent = "  "): string[] {
     if (visited.has(nodeId)) {
       return [`${indent}// Already processed: ${nodeId}`];
@@ -790,72 +397,59 @@ export function generateWorkflowCode(
 
     visited.add(nodeId);
     const node = nodeMap.get(nodeId);
-    if (!node) {
-      return [];
-    }
+    if (!node) return [];
 
-    // Use friendly variable name from map, fallback to node type + id if not found
     const varName =
       nodeIdToVarName.get(nodeId) ||
       `${node.data.type}_${nodeId.replace(/-/g, "_")}`;
 
-    let lines: string[] = [];
-
     switch (node.data.type) {
       case "trigger": {
-        const { lines: triggerLines, wasSkipped } = processTriggerNode(
-          node,
-          nodeId,
-          varName,
-          indent
-        );
-        // If trigger was skipped, triggerLines already contains next nodes
-        if (wasSkipped) {
-          return triggerLines; // Already processed next nodes
+        const triggerCode = generateTriggerCode(node, nodeId, varName, indent);
+        if (triggerCode.length === 0) {
+          const lines: string[] = [];
+          const nextNodes = edgesBySource.get(nodeId) || [];
+          for (const nextNodeId of nextNodes) {
+            lines.push(...generateNodeCode(nextNodeId, indent));
+          }
+          return lines;
         }
-        return processNextNodes(nodeId, triggerLines, indent);
+        return processNextNodes(nodeId, triggerCode, indent);
       }
 
       case "action": {
-        const actionLines = processActionNode(node, nodeId, varName, indent);
-        // Conditions return early from processActionNode, so check if it's a condition
         const actionType = node.data.config?.actionType as string;
         if (actionType === "Condition") {
-          return actionLines; // Already processed, don't process next nodes
+          return generateConditionNodeCode(node, nodeId, indent);
         }
-        lines = actionLines;
-        break;
+        const actionLines = generateActionNodeCode(node, nodeId, indent, varName);
+        return processNextNodes(nodeId, actionLines, indent);
       }
 
       default:
-        lines.push(`${indent}// Unknown node type: ${node.data.type}`);
-        break;
+        return processNextNodes(
+          nodeId,
+          [`${indent}// Unknown node type: ${node.data.type}`],
+          indent
+        );
     }
-
-    return processNextNodes(nodeId, lines, indent);
   }
 
-  // Generate code starting from trigger nodes
+  // Generate code starting from triggers
   if (triggerNodes.length === 0) {
     codeLines.push("  // No trigger nodes found");
   } else {
     for (const trigger of triggerNodes) {
-      const triggerCode = generateNodeCode(trigger.id, "  ");
-      codeLines.push(...triggerCode);
+      codeLines.push(...generateNodeCode(trigger.id, "  "));
     }
   }
 
   codeLines.push("}");
 
-  // Build final code
   const importStatements = Array.from(imports).join("\n");
   const code = `${importStatements}\n\n${codeLines.join("\n")}\n`;
 
-  return {
-    code,
-    functionName,
-    imports: Array.from(imports),
-  };
+  return { code, functionName, imports: Array.from(imports) };
 }
 
 /**
@@ -871,7 +465,7 @@ export function generateWorkflowModule(
 
   return `/**
  * Generated Workflow: ${workflowName}
- * 
+ *
  * This file was automatically generated from a workflow definition.
  * DO NOT EDIT MANUALLY - regenerate from the workflow editor instead.
  */

@@ -11,6 +11,7 @@ export type WorkflowNodeData = {
   type: WorkflowNodeType;
   config?: Record<string, unknown>;
   status?: "idle" | "running" | "success" | "error";
+  enabled?: boolean; // Whether the step is enabled (defaults to true)
   onClick?: () => void; // For the "add" node type
 };
 
@@ -31,6 +32,24 @@ export const currentWorkflowNameAtom = atom<string>("");
 // UI state atoms
 export const propertiesPanelActiveTabAtom = atom<string>("properties");
 export const showMinimapAtom = atom(false);
+export const selectedExecutionIdAtom = atom<string | null>(null);
+export const rightPanelWidthAtom = atom<string | null>(null);
+export const isPanelAnimatingAtom = atom<boolean>(false);
+export const hasSidebarBeenShownAtom = atom<boolean>(false);
+export const isSidebarCollapsedAtom = atom<boolean>(false);
+export const isTransitioningFromHomepageAtom = atom<boolean>(false);
+
+// Execution log entry type for storing run outputs per node
+export type ExecutionLogEntry = {
+  nodeId: string;
+  nodeName: string;
+  nodeType: string;
+  status: "pending" | "running" | "success" | "error";
+  output?: unknown;
+};
+
+// Map of nodeId -> execution log entry for the currently selected execution
+export const executionLogsAtom = atom<Record<string, ExecutionLogEntry>>({});
 
 // Autosave functionality
 let autosaveTimeoutId: NodeJS.Timeout | null = null;
@@ -519,3 +538,13 @@ export const redoAtom = atom(null, (get, set) => {
 // Can undo/redo atoms
 export const canUndoAtom = atom((get) => get(historyAtom).length > 0);
 export const canRedoAtom = atom((get) => get(futureAtom).length > 0);
+
+// Clear all node statuses (used when clearing runs)
+export const clearNodeStatusesAtom = atom(null, (get, set) => {
+  const currentNodes = get(nodesAtom);
+  const newNodes = currentNodes.map((node) => ({
+    ...node,
+    data: { ...node.data, status: "idle" as const },
+  }));
+  set(nodesAtom, newNodes);
+});

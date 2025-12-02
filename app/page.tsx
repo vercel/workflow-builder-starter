@@ -1,84 +1,111 @@
 "use client";
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { WorkflowCanvas } from "@/components/workflow/workflow-canvas";
 import { WorkflowToolbar } from "@/components/workflow/workflow-toolbar";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { authClient, useSession } from "@/lib/auth-client";
 import {
   currentWorkflowIdAtom,
-  edgesAtom,
-  nodesAtom,
   type WorkflowNode,
   type WorkflowEdge,
 } from "@/lib/workflow-store";
 import exampleWorkflow from "../example-workflow.json";
-import exampleDataPipeline from "../example-workflow-data-pipeline.json";
 
 const Home = () => {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, isPending } = useSession();
   const currentWorkflowId = useAtomValue(currentWorkflowIdAtom);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const initRef = useRef(false);
 
   useEffect(() => {
+    if (initRef.current) return;
+    if (isPending) return;
+
+    initRef.current = true;
+
     const init = async () => {
       try {
-        // Ensure session exists
+        // Sign in anonymously if no session
         if (!session) {
-          await authClient.signIn.anonymous();
-          // Give it a moment to propagate
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          console.log("Signing in anonymously...");
+          const result = await authClient.signIn.anonymous();
+          if (result.error) {
+            console.error("Sign-in failed:", result.error);
+            setError("Sign-in failed. Refresh to try again.");
+            setIsInitializing(false);
+            return;
+          }
+          // Wait for cookies
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
 
-        // Check for existing workflows
-        const workflows = await api.workflow.getAll();
+        // Get workflows
+        let workflows = await api.workflow.getAll();
+
+        // Retry once if empty (session propagation)
+        if (workflows.length === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          workflows = await api.workflow.getAll();
+        }
 
         if (workflows.length === 0) {
-          // Seed both sample workflows
-          console.log("Seeding sample workflows...");
+          // Seed Hello Workflow on first visit
+          console.log("Seeding Hello Workflow...");
 
-          // Create Operations Bridge (linear pattern)
-          const operationsBridge = await api.workflow.create({
-            name: "Sample Operations Bridge",
-            description: "Linear escalation workflow - diagnostic alerts",
+          const helloWorkflow = await api.workflow.create({
+            name: "Hello Workflow",
+            description: "Your first workflow",
             nodes: exampleWorkflow.nodes as WorkflowNode[],
             edges: exampleWorkflow.edges as WorkflowEdge[],
           });
 
-          // Create Data Pipeline (fan-out pattern)
-          await api.workflow.create({
-            name: "Data Pipeline Example",
-            description: "Fan-out pattern - parallel processing with aggregation",
-            nodes: exampleDataPipeline.nodes as WorkflowNode[],
-            edges: exampleDataPipeline.edges as WorkflowEdge[],
-          });
-
-          // Redirect to Operations Bridge as the primary example
-          router.replace(`/workflows/${operationsBridge.id}`);
+          router.replace(`/workflows/${helloWorkflow.id}`);
         } else {
-          // Redirect to the most recent workflow
-          router.replace(`/workflows/${workflows[0].id}`);
+          const mostRecent = workflows.sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          )[0];
+          router.replace(`/workflows/${mostRecent.id}`);
         }
-      } catch (error) {
-        console.error("Failed to initialize:", error);
-        setIsInitializing(false); // Stop loading if error, show read-only canvas
+      } catch (err) {
+        console.error("Init failed:", err);
+        if (err instanceof ApiError && err.status === 401) {
+          window.location.reload();
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Failed to initialize");
+        setIsInitializing(false);
       }
     };
 
     init();
-  }, [session, router]);
+  }, [session, isPending, router]);
 
   if (isInitializing) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Setting up your workflow environment...</p>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-destructive">{error}</p>
+          <button onClick={() => window.location.reload()} className="text-primary underline">
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -89,8 +116,8 @@ const Home = () => {
       <main className="relative flex size-full overflow-hidden">
         <ReactFlowProvider>
           <div className="relative flex-1 overflow-hidden">
-            <WorkflowToolbar workflowId={currentWorkflowId ?? undefined} readOnly={true} />
-            <WorkflowCanvas showMinimap={false} readOnly={true} />
+            <WorkflowToolbar workflowId={currentWorkflowId ?? undefined} />
+            <WorkflowCanvas />
           </div>
         </ReactFlowProvider>
       </main>

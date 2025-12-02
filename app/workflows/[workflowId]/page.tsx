@@ -1,32 +1,30 @@
 "use client";
 
-import { ReactFlowProvider } from "@xyflow/react";
 import { useAtom, useSetAtom } from "jotai";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { use, useCallback, useEffect, useRef } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
 import { NodeConfigPanel } from "@/components/workflow/node-config-panel";
-import { WorkflowCanvas } from "@/components/workflow/workflow-canvas";
-import { WorkflowToolbar } from "@/components/workflow/workflow-toolbar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api-client";
 import {
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
   edgesAtom,
+  hasSidebarBeenShownAtom,
   hasUnsavedChangesAtom,
   isExecutingAtom,
   isGeneratingAtom,
+  isPanelAnimatingAtom,
   isSavingAtom,
+  isSidebarCollapsedAtom,
   nodesAtom,
   propertiesPanelActiveTabAtom,
+  rightPanelWidthAtom,
+  selectedExecutionIdAtom,
   selectedNodeAtom,
   updateNodeDataAtom,
   type WorkflowNode,
@@ -47,6 +45,9 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
   const [nodes] = useAtom(nodesAtom);
   const [edges] = useAtom(edgesAtom);
   const [currentWorkflowId] = useAtom(currentWorkflowIdAtom);
+  const [selectedExecutionId, setSelectedExecutionId] = useAtom(
+    selectedExecutionIdAtom
+  );
   const setNodes = useSetAtom(nodesAtom);
   const setEdges = useSetAtom(edgesAtom);
   const setCurrentWorkflowId = useSetAtom(currentWorkflowIdAtom);
@@ -56,9 +57,171 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
   const setHasUnsavedChanges = useSetAtom(hasUnsavedChangesAtom);
   const [workflowNotFound, setWorkflowNotFound] = useAtom(workflowNotFoundAtom);
   const setActiveTab = useSetAtom(propertiesPanelActiveTabAtom);
+  const setRightPanelWidth = useSetAtom(rightPanelWidthAtom);
+  const setIsPanelAnimating = useSetAtom(isPanelAnimatingAtom);
+  const [hasSidebarBeenShown, setHasSidebarBeenShown] = useAtom(
+    hasSidebarBeenShownAtom
+  );
+  const [panelCollapsed, setPanelCollapsed] = useAtom(isSidebarCollapsedAtom);
+
+  // Panel width state for resizing
+  const [panelWidth, setPanelWidth] = useState(30); // default percentage
+  // Start visible if sidebar has already been shown (switching between workflows)
+  const [panelVisible, setPanelVisible] = useState(hasSidebarBeenShown);
+  const [isDraggingResize, setIsDraggingResize] = useState(false);
+  const isResizing = useRef(false);
+  const hasReadCookies = useRef(false);
+
+  // Read sidebar preferences from cookies on mount (after hydration)
+  useEffect(() => {
+    if (hasReadCookies.current) {
+      return;
+    }
+    hasReadCookies.current = true;
+
+    // Read width
+    const widthCookie = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("sidebar-width="));
+    if (widthCookie) {
+      const value = Number.parseFloat(widthCookie.split("=")[1]);
+      if (!Number.isNaN(value) && value >= 20 && value <= 50) {
+        setPanelWidth(value);
+      }
+    }
+
+    // Read collapsed state
+    const collapsedCookie = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("sidebar-collapsed="));
+    if (collapsedCookie) {
+      setPanelCollapsed(collapsedCookie.split("=")[1] === "true");
+    }
+  }, [setPanelCollapsed]);
+
+  // Save sidebar width to cookie when it changes (skip initial render)
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      return;
+    }
+    // biome-ignore lint/suspicious/noDocumentCookie: simple cookie storage for sidebar width
+    document.cookie = `sidebar-width=${panelWidth}; path=/; max-age=31536000`; // 1 year
+  }, [panelWidth]);
+
+  // Save collapsed state to cookie when it changes
+  useEffect(() => {
+    if (!hasReadCookies.current) {
+      return;
+    }
+    // biome-ignore lint/suspicious/noDocumentCookie: simple cookie storage for sidebar state
+    document.cookie = `sidebar-collapsed=${panelCollapsed}; path=/; max-age=31536000`; // 1 year
+  }, [panelCollapsed]);
+
+  // Trigger slide-in animation on mount (only for homepage -> workflow transition)
+  useEffect(() => {
+    // Check if we came from homepage
+    const shouldAnimate = sessionStorage.getItem("animate-sidebar") === "true";
+    sessionStorage.removeItem("animate-sidebar");
+
+    // Skip animation if sidebar has already been shown (switching between workflows)
+    // or if we didn't come from homepage (direct load, refresh)
+    if (hasSidebarBeenShown || !shouldAnimate) {
+      setPanelVisible(true);
+      setHasSidebarBeenShown(true);
+      return;
+    }
+
+    // Set animating state before starting
+    setIsPanelAnimating(true);
+    // Delay to ensure the canvas is visible at full width first
+    const timer = setTimeout(() => {
+      setPanelVisible(true);
+      setHasSidebarBeenShown(true);
+    }, 100);
+    // Clear animating state after animation completes (300ms + buffer)
+    const animationTimer = setTimeout(() => setIsPanelAnimating(false), 400);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(animationTimer);
+      setIsPanelAnimating(false);
+    };
+  }, [hasSidebarBeenShown, setHasSidebarBeenShown, setIsPanelAnimating]);
+
+  // Keyboard shortcut Cmd/Ctrl+B to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault();
+        setIsPanelAnimating(true);
+        setPanelCollapsed((prev) => !prev);
+        setTimeout(() => setIsPanelAnimating(false), 350);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setIsPanelAnimating, setPanelCollapsed]);
+
+  // Set right panel width for AI prompt positioning
+  // Only set it after the panel is visible (animated in) to coordinate the animation
+  useEffect(() => {
+    if (!isMobile && panelVisible && !panelCollapsed) {
+      setRightPanelWidth(`${panelWidth}%`);
+    } else {
+      // During initial render or when collapsed, set to null so prompt is centered
+      setRightPanelWidth(null);
+    }
+    return () => {
+      setRightPanelWidth(null);
+    };
+  }, [isMobile, setRightPanelWidth, panelWidth, panelVisible, panelCollapsed]);
+
+  // Handle panel resize
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    setIsDraggingResize(true);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizing.current) {
+        return;
+      }
+      const newWidth =
+        ((window.innerWidth - moveEvent.clientX) / window.innerWidth) * 100;
+      // Clamp between 20% and 50%
+      setPanelWidth(Math.min(50, Math.max(20, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      setIsDraggingResize(false);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
 
   // Ref to track polling interval
   const executionPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref to track polling interval for selected execution
+  const selectedExecutionPollingIntervalRef = useRef<NodeJS.Timeout | null>(
+    null
+  );
+  // Ref to access current nodes without triggering effect re-runs
+  const nodesRef = useRef(nodes);
+
+  // Keep nodes ref in sync
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
 
   // Helper function to generate workflow from AI
   const generateWorkflowFromAI = useCallback(
@@ -301,11 +464,12 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
 
       const result = await response.json();
 
+      // Select the new execution
+      setSelectedExecutionId(result.executionId);
+
       // Poll for execution status updates
       const pollInterval = setInterval(async () => {
-        const { isComplete, status } = await pollExecutionStatus(
-          result.executionId
-        );
+        const { isComplete } = await pollExecutionStatus(result.executionId);
 
         if (isComplete) {
           if (executionPollingIntervalRef.current) {
@@ -313,16 +477,10 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
             executionPollingIntervalRef.current = null;
           }
 
-          if (status === "error") {
-            toast.error("Test run failed");
-          }
-
           setIsExecuting(false);
 
-          // Reset node statuses after 5 seconds
-          setTimeout(() => {
-            updateAllNodeStatuses("idle");
-          }, 5000);
+          // Don't reset node statuses - let them show the final state
+          // The user can click another run or deselect to reset
         }
       }, 500); // Poll every 500ms
 
@@ -349,6 +507,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
     setNodes,
     setEdges,
     setSelectedNodeId,
+    setSelectedExecutionId,
   ]);
 
   // Helper to check if target is an input element
@@ -420,69 +579,157 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       if (executionPollingIntervalRef.current) {
         clearInterval(executionPollingIntervalRef.current);
       }
+      if (selectedExecutionPollingIntervalRef.current) {
+        clearInterval(selectedExecutionPollingIntervalRef.current);
+      }
     },
     []
   );
 
+  // Poll for selected execution status
+  useEffect(() => {
+    // Clear existing interval if any
+    if (selectedExecutionPollingIntervalRef.current) {
+      clearInterval(selectedExecutionPollingIntervalRef.current);
+      selectedExecutionPollingIntervalRef.current = null;
+    }
+
+    // If no execution is selected or it's the currently running one, don't poll
+    if (!selectedExecutionId) {
+      // Reset all node statuses when no execution is selected
+      for (const node of nodesRef.current) {
+        updateNodeData({ id: node.id, data: { status: "idle" } });
+      }
+      return;
+    }
+
+    // Start polling for the selected execution
+    const pollSelectedExecution = async () => {
+      try {
+        const statusData =
+          await api.workflow.getExecutionStatus(selectedExecutionId);
+
+        // Update node statuses based on the execution logs
+        for (const nodeStatus of statusData.nodeStatuses) {
+          updateNodeData({
+            id: nodeStatus.nodeId,
+            data: {
+              status: nodeStatus.status as
+                | "idle"
+                | "running"
+                | "success"
+                | "error",
+            },
+          });
+        }
+
+        // Stop polling if execution is complete
+        if (
+          statusData.status !== "running" &&
+          selectedExecutionPollingIntervalRef.current
+        ) {
+          clearInterval(selectedExecutionPollingIntervalRef.current);
+          selectedExecutionPollingIntervalRef.current = null;
+        }
+      } catch (error) {
+        console.error("Failed to poll selected execution status:", error);
+        // Clear polling on error
+        if (selectedExecutionPollingIntervalRef.current) {
+          clearInterval(selectedExecutionPollingIntervalRef.current);
+          selectedExecutionPollingIntervalRef.current = null;
+        }
+      }
+    };
+
+    // Poll immediately and then every 500ms
+    pollSelectedExecution();
+    const pollInterval = setInterval(pollSelectedExecution, 500);
+    selectedExecutionPollingIntervalRef.current = pollInterval;
+
+    return () => {
+      if (selectedExecutionPollingIntervalRef.current) {
+        clearInterval(selectedExecutionPollingIntervalRef.current);
+        selectedExecutionPollingIntervalRef.current = null;
+      }
+    };
+  }, [selectedExecutionId, updateNodeData]);
+
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden">
-      <main className="relative flex size-full overflow-hidden">
-        <ReactFlowProvider>
-          {isMobile ? (
-            <div className="relative size-full overflow-hidden">
-              <WorkflowToolbar workflowId={workflowId} readOnly={true} />
-              <WorkflowCanvas readOnly={true} />
+    <div className="flex h-dvh w-full flex-col overflow-hidden">
+      {/* Workflow not found overlay */}
+      {workflowNotFound && (
+        <div className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center">
+          <div className="rounded-lg border bg-background p-8 text-center shadow-lg">
+            <h1 className="mb-2 font-semibold text-2xl">Workflow Not Found</h1>
+            <p className="mb-6 text-muted-foreground">
+              The workflow you're looking for doesn't exist or has been deleted.
+            </p>
+            <Button asChild>
+              <Link href="/">New Workflow</Link>
+            </Button>
+          </div>
+        </div>
+      )}
 
-              {workflowNotFound && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="rounded-lg border bg-background p-8 text-center shadow-lg">
-                    <h1 className="mb-2 font-semibold text-2xl">
-                      Workflow Not Found
-                    </h1>
-                    <p className="mb-6 text-muted-foreground">
-                      The workflow you're looking for doesn't exist or has been
-                      deleted.
-                    </p>
-                    <Button asChild>
-                      <Link href="/">New Workflow</Link>
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <ResizablePanelGroup direction="horizontal">
-              <ResizablePanel defaultSize={70} minSize={30}>
-                <div className="relative size-full overflow-hidden">
-                  <WorkflowToolbar workflowId={workflowId} readOnly={true} />
-                  <WorkflowCanvas readOnly={true} />
+      {/* Expand button when panel is collapsed */}
+      {!isMobile && panelCollapsed && (
+        <button
+          className="-translate-y-1/2 pointer-events-auto absolute top-1/2 right-0 z-20 flex size-6 items-center justify-center rounded-l-full border border-r-0 bg-background shadow-sm transition-colors hover:bg-muted"
+          onClick={() => {
+            setIsPanelAnimating(true);
+            setPanelCollapsed(false);
+            setTimeout(() => setIsPanelAnimating(false), 350);
+          }}
+          type="button"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+      )}
 
-                  {workflowNotFound && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="rounded-lg border bg-background p-8 text-center shadow-lg">
-                        <h1 className="mb-2 font-semibold text-2xl">
-                          Workflow Not Found
-                        </h1>
-                        <p className="mb-6 text-muted-foreground">
-                          The workflow you're looking for doesn't exist or has
-                          been deleted.
-                        </p>
-                        <Button asChild>
-                          <Link href="/">New Workflow</Link>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={30} maxSize={50} minSize={20}>
-                <NodeConfigPanel />
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          )}
-        </ReactFlowProvider>
-      </main>
+      {/* Right panel overlay (desktop only) */}
+      {!isMobile && (
+        <div
+          className="pointer-events-auto absolute inset-y-0 right-0 z-20 border-l bg-background transition-transform duration-300 ease-out"
+          style={{
+            width: `${panelWidth}%`,
+            transform:
+              panelVisible && !panelCollapsed
+                ? "translateX(0)"
+                : "translateX(100%)",
+          }}
+        >
+          {/* Resize handle with collapse button */}
+          {/* biome-ignore lint/a11y/useSemanticElements: custom resize handle */}
+          <div
+            aria-orientation="vertical"
+            aria-valuenow={panelWidth}
+            className="group absolute inset-y-0 left-0 z-10 w-3 cursor-col-resize"
+            onMouseDown={handleResizeStart}
+            role="separator"
+            tabIndex={0}
+          >
+            {/* Hover indicator */}
+            <div className="absolute inset-y-0 left-0 w-1 bg-transparent transition-colors group-hover:bg-blue-500 group-active:bg-blue-600" />
+            {/* Collapse button - hidden while resizing */}
+            {!isDraggingResize && (
+              <button
+                className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-0 flex size-6 items-center justify-center rounded-full border bg-background opacity-0 shadow-sm transition-opacity hover:bg-muted group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPanelAnimating(true);
+                  setPanelCollapsed(true);
+                  setTimeout(() => setIsPanelAnimating(false), 350);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                type="button"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            )}
+          </div>
+          <NodeConfigPanel />
+        </div>
+      )}
     </div>
   );
 };

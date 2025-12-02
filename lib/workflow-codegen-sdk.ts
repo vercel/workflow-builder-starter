@@ -1,14 +1,8 @@
 import "server-only";
 
-// Import codegen templates directly
+// Built-in codegen templates only. Plugin templates are loaded dynamically.
 import conditionTemplate from "./codegen-templates/condition";
-import createTicketTemplate from "./codegen-templates/create-ticket";
-import databaseQueryTemplate from "./codegen-templates/database-query";
-import generateImageTemplate from "./codegen-templates/generate-image";
-import generateTextTemplate from "./codegen-templates/generate-text";
 import httpRequestTemplate from "./codegen-templates/http-request";
-import sendEmailTemplate from "./codegen-templates/send-email";
-import sendSlackMessageTemplate from "./codegen-templates/send-slack-message";
 import {
   ARRAY_INDEX_PATTERN,
   analyzeNodeUsage,
@@ -28,14 +22,8 @@ const FUNCTION_BODY_REGEX =
   /export\s+(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*(?::\s*[^{]+)?\s*\{([\s\S]*)\}/;
 
 function loadStepImplementation(actionType: string): string | null {
+  // Built-in templates only. Plugin steps are not available in the starter.
   const templateMap: Record<string, string> = {
-    "Send Email": sendEmailTemplate,
-    "Send Slack Message": sendSlackMessageTemplate,
-    "Create Ticket": createTicketTemplate,
-    "Find Issues": createTicketTemplate, // Uses same template for now
-    "Generate Text": generateTextTemplate,
-    "Generate Image": generateImageTemplate,
-    "Database Query": databaseQueryTemplate,
     "HTTP Request": httpRequestTemplate,
     Condition: conditionTemplate,
   };
@@ -304,14 +292,14 @@ function _generateGenerateImageStepBody(
   const imagePrompt = (config.imagePrompt as string) || "";
   const convertedImagePrompt = convertTemplateToJS(imagePrompt);
 
-  return `  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return `  const openai = new OpenAI({ apiKey: process.env.AI_GATEWAY_API_KEY });
   
   // Use template literal with dynamic values from outputs
   const imagePrompt = \`${escapeForTemplateLiteral(convertedImagePrompt)}\`;
   const finalPrompt = (input.imagePrompt as string) || imagePrompt;
   
   const response = await openai.images.generate({
-    model: '${config.imageModel || "dall-e-3"}',
+    model: '${config.imageModel || "google/imagen-4.0-generate"}',
     prompt: finalPrompt,
     n: 1,
     response_format: 'b64_json',
@@ -490,25 +478,44 @@ export function generateWorkflowSDKCode(
 
   function buildAITextParams(config: Record<string, unknown>): string[] {
     imports.add("import { generateText } from 'ai';");
-    const modelId = (config.aiModel as string) || "gpt-4o-mini";
-    const provider =
-      modelId.startsWith("gpt-") || modelId.startsWith("o1-")
-        ? "openai"
-        : "anthropic";
+    const modelId = (config.aiModel as string) || "meta/llama-4-scout";
+
+    // Determine the full model string with provider
+    // If the model already contains a "/", it already has a provider prefix, so use as-is
+    let modelString: string;
+    if (modelId.includes("/")) {
+      modelString = modelId;
+    } else {
+      // Infer provider from model name for models without provider prefix
+      let provider: string;
+      if (modelId.startsWith("gpt-") || modelId.startsWith("o1-")) {
+        provider = "openai";
+      } else if (modelId.startsWith("claude-")) {
+        provider = "anthropic";
+      } else {
+        provider = "openai"; // default to openai
+      }
+      modelString = `${provider}/${modelId}`;
+    }
+
     return [
-      `model: "${provider}/${modelId}"`,
+      `model: "${modelString}"`,
       `prompt: \`${convertTemplateToJS((config.aiPrompt as string) || "")}\``,
       "apiKey: process.env.OPENAI_API_KEY!",
     ];
   }
 
   function buildAIImageParams(config: Record<string, unknown>): string[] {
-    imports.add("import OpenAI from 'openai';");
-    const imageModel = (config.imageModel as string) || "dall-e-3";
+    imports.add(
+      "import { experimental_generateImage as generateImage } from 'ai';"
+    );
+    const imageModel =
+      (config.imageModel as string) || "google/imagen-4.0-generate";
     return [
       `model: "${imageModel}"`,
       `prompt: \`${convertTemplateToJS((config.imagePrompt as string) || "")}\``,
-      "apiKey: process.env.OPENAI_API_KEY!",
+      'size: "1024x1024"',
+      "providerOptions: { openai: { apiKey: process.env.AI_GATEWAY_API_KEY! } }",
     ];
   }
 
@@ -536,16 +543,45 @@ export function generateWorkflowSDKCode(
     ];
   }
 
+  function buildFirecrawlParams(
+    actionType: string,
+    config: Record<string, unknown>
+  ): string[] {
+    imports.add("import FirecrawlApp from '@mendable/firecrawl-js';");
+
+    const mode = actionType === "Search" ? "search" : "scrape";
+    const formats = config.formats
+      ? JSON.stringify(config.formats)
+      : "['markdown']";
+
+    const params = [
+      `mode: '${mode}'`,
+      "apiKey: process.env.FIRECRAWL_API_KEY!",
+      `formats: ${formats}`,
+    ];
+
+    if (config.url) {
+      params.push(
+        `url: \`${convertTemplateToJS((config.url as string) || "")}\``
+      );
+    }
+    if (config.query) {
+      params.push(
+        `query: \`${convertTemplateToJS((config.query as string) || "")}\``
+      );
+    }
+    if (config.limit) {
+      params.push(`limit: ${config.limit}`);
+    }
+
+    return params;
+  }
   function buildStepInputParams(
     actionType: string,
     config: Record<string, unknown>
   ): string[] {
+    // Built-in steps only. Plugin steps are not available in the starter.
     const paramBuilders: Record<string, () => string[]> = {
-      "Send Email": () => buildEmailParams(config),
-      "Send Slack Message": () => buildSlackParams(config),
-      "Create Ticket": () => buildTicketParams(config),
-      "Generate Text": () => buildAITextParams(config),
-      "Generate Image": () => buildAIImageParams(config),
       "Database Query": () => buildDatabaseParams(config),
       "HTTP Request": () => buildHttpParams(config),
       Condition: () => buildConditionParams(config),

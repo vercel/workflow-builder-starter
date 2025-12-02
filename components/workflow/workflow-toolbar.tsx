@@ -11,6 +11,8 @@ import {
   Plus,
   Redo2,
   Save,
+  Settings2,
+  Trash2,
   Undo2,
 } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -19,6 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -45,6 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { api } from "@/lib/api-client";
 import { useSession } from "@/lib/auth-client";
 import {
@@ -54,6 +58,8 @@ import {
   clearWorkflowAtom,
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
+  deleteEdgeAtom,
+  deleteNodeAtom,
   edgesAtom,
   hasUnsavedChangesAtom,
   isExecutingAtom,
@@ -62,6 +68,8 @@ import {
   nodesAtom,
   propertiesPanelActiveTabAtom,
   redoAtom,
+  selectedEdgeAtom,
+  selectedExecutionIdAtom,
   selectedNodeAtom,
   showClearDialogAtom,
   showDeleteDialogAtom,
@@ -71,13 +79,14 @@ import {
   type WorkflowNode,
 } from "@/lib/workflow-store";
 import { Panel } from "../ai-elements/panel";
+import { DeployButton } from "../deploy-button";
 import { GitHubStarsButton } from "../github-stars-button";
 import { WorkflowIcon } from "../ui/workflow-icon";
 import { UserMenu } from "../workflows/user-menu";
+import { PanelInner } from "./node-config-panel";
 
 type WorkflowToolbarProps = {
   workflowId?: string;
-  readOnly?: boolean;
 };
 
 // Helper functions to reduce complexity
@@ -103,6 +112,7 @@ type ExecuteTestWorkflowParams = {
   }) => void;
   pollingIntervalRef: React.MutableRefObject<NodeJS.Timeout | null>;
   setIsExecuting: (value: boolean) => void;
+  setSelectedExecutionId: (value: string | null) => void;
 };
 
 async function executeTestWorkflow({
@@ -111,6 +121,7 @@ async function executeTestWorkflow({
   updateNodeData,
   pollingIntervalRef,
   setIsExecuting,
+  setSelectedExecutionId,
 }: ExecuteTestWorkflowParams) {
   // Set all nodes to idle first
   updateNodesStatus(nodes, updateNodeData, "idle");
@@ -137,6 +148,9 @@ async function executeTestWorkflow({
     }
 
     const result = await response.json();
+
+    // Select the new execution
+    setSelectedExecutionId(result.executionId);
 
     // Poll for execution status updates
     const pollInterval = setInterval(async () => {
@@ -166,16 +180,10 @@ async function executeTestWorkflow({
             pollingIntervalRef.current = null;
           }
 
-          if (statusData.status === "error") {
-            toast.error("Test run failed");
-          }
-
           setIsExecuting(false);
 
-          // Reset node statuses after 5 seconds
-          setTimeout(() => {
-            updateNodesStatus(nodes, updateNodeData, "idle");
-          }, 5000);
+          // Don't reset node statuses - let them show the final state
+          // The user can click another run or deselect to reset
         }
       } catch (error) {
         console.error("Failed to poll execution status:", error);
@@ -209,6 +217,7 @@ type WorkflowHandlerParams = {
   setNodes: (nodes: WorkflowNode[]) => void;
   setEdges: (edges: WorkflowEdge[]) => void;
   setSelectedNodeId: (id: string | null) => void;
+  setSelectedExecutionId: (id: string | null) => void;
 };
 
 function useWorkflowHandlers({
@@ -223,6 +232,7 @@ function useWorkflowHandlers({
   setNodes,
   setEdges,
   setSelectedNodeId,
+  setSelectedExecutionId,
 }: WorkflowHandlerParams) {
   const [showUnsavedRunDialog, setShowUnsavedRunDialog] = useState(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -275,6 +285,7 @@ function useWorkflowHandlers({
       updateNodeData,
       pollingIntervalRef,
       setIsExecuting,
+      setSelectedExecutionId,
     });
     // Don't set executing to false here - let polling handle it
   };
@@ -318,6 +329,7 @@ function useWorkflowState() {
   const { data: session } = useSession();
   const setActiveTab = useSetAtom(propertiesPanelActiveTabAtom);
   const setSelectedNodeId = useSetAtom(selectedNodeAtom);
+  const setSelectedExecutionId = useSetAtom(selectedExecutionIdAtom);
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
@@ -391,6 +403,7 @@ function useWorkflowState() {
     setNodes,
     setEdges,
     setSelectedNodeId,
+    setSelectedExecutionId,
   };
 }
 
@@ -418,6 +431,7 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
     setNodes,
     setEdges,
     setSelectedNodeId,
+    setSelectedExecutionId,
   } = state;
 
   const {
@@ -437,6 +451,7 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
     setNodes,
     setEdges,
     setSelectedNodeId,
+    setSelectedExecutionId,
   });
 
   const handleSaveAndRun = async () => {
@@ -583,11 +598,32 @@ function ToolbarActions({
   state: ReturnType<typeof useWorkflowState>;
   actions: ReturnType<typeof useWorkflowActions>;
 }) {
+  const [showPropertiesSheet, setShowPropertiesSheet] = useState(false);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [selectedNodeId] = useAtom(selectedNodeAtom);
+  const [selectedEdgeId] = useAtom(selectedEdgeAtom);
+  const [nodes] = useAtom(nodesAtom);
+  const [edges] = useAtom(edgesAtom);
+  const deleteNode = useSetAtom(deleteNodeAtom);
+  const deleteEdge = useSetAtom(deleteEdgeAtom);
   const { screenToFlowPosition } = useReactFlow();
+
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId);
+  const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
+  const hasSelection = selectedNode || selectedEdge;
 
   if (!workflowId) {
     return null;
   }
+
+  const handleDelete = () => {
+    if (selectedNodeId) {
+      deleteNode(selectedNodeId);
+    } else if (selectedEdgeId) {
+      deleteEdge(selectedEdgeId);
+    }
+    setShowDeleteAlert(false);
+  };
 
   const handleAddStep = () => {
     // Get the ReactFlow wrapper (the visible canvas container)
@@ -667,6 +703,60 @@ function ToolbarActions({
           <Plus className="size-4" />
         </Button>
       </ButtonGroup>
+
+      {/* Properties - Mobile Vertical (always visible) */}
+      <ButtonGroup className="flex lg:hidden" orientation="vertical">
+        <Button
+          className="border hover:bg-black/5 dark:hover:bg-white/5"
+          onClick={() => setShowPropertiesSheet(true)}
+          size="icon"
+          title="Properties"
+          variant="secondary"
+        >
+          <Settings2 className="size-4" />
+        </Button>
+        {/* Delete - Show when node or edge is selected */}
+        {hasSelection && (
+          <Button
+            className="border hover:bg-black/5 dark:hover:bg-white/5"
+            onClick={() => setShowDeleteAlert(true)}
+            size="icon"
+            title="Delete"
+            variant="secondary"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        )}
+      </ButtonGroup>
+
+      {/* Properties Sheet - Mobile Only */}
+      <Sheet onOpenChange={setShowPropertiesSheet} open={showPropertiesSheet}>
+        <SheetContent className="w-full p-0 sm:max-w-full" side="bottom">
+          <div className="h-[80vh]">
+            <PanelInner />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Alert - Mobile Only */}
+      <AlertDialog onOpenChange={setShowDeleteAlert} open={showDeleteAlert}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedNode ? "Node" : "Connection"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this{" "}
+              {selectedNode ? "node" : "connection"}? This action cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Add Step - Desktop Horizontal */}
       <ButtonGroup className="hidden lg:flex" orientation="horizontal">
@@ -857,14 +947,26 @@ function WorkflowMenuComponent({
         <DropdownMenuTrigger className="flex h-full cursor-pointer items-center gap-2 px-3 font-medium text-sm transition-all hover:bg-black/5 dark:hover:bg-white/5">
           <WorkflowIcon className="size-4" />
           <p className="font-medium text-sm">
-            {workflowId ? state.workflowName : "New Workflow"}
+            {workflowId ? (
+              state.workflowName
+            ) : (
+              <>
+                <span className="sm:hidden">New</span>
+                <span className="hidden sm:inline">New Workflow</span>
+              </>
+            )}
           </p>
           <ChevronDown className="size-3 opacity-50" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuItem className="flex items-center justify-between">
-            <a href="/">New Workflow</a>
-            {!workflowId && <Check className="size-4 shrink-0" />}
+          <DropdownMenuItem
+            asChild
+            className="flex items-center justify-between"
+          >
+            <a href="/">
+              New Workflow{" "}
+              {!workflowId && <Check className="size-4 shrink-0" />}
+            </a>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {state.allWorkflows.length === 0 ? (
@@ -1056,7 +1158,7 @@ function WorkflowDialogsComponent({
   );
 }
 
-export const WorkflowToolbar = ({ workflowId, readOnly }: WorkflowToolbarProps) => {
+export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
   const state = useWorkflowState();
   const actions = useWorkflowActions(state);
 
@@ -1073,23 +1175,24 @@ export const WorkflowToolbar = ({ workflowId, readOnly }: WorkflowToolbarProps) 
         />
       </Panel>
 
-      <Panel
-        className="flex flex-col-reverse items-end gap-2 border-none bg-transparent p-0 lg:flex-row lg:items-center"
-        position="top-right"
-      >
-        {!readOnly && (
+      <div className="pointer-events-auto absolute top-4 right-4 z-10">
+        <div className="flex flex-col-reverse items-end gap-2 lg:flex-row lg:items-center">
           <ToolbarActions
             actions={actions}
             state={state}
             workflowId={workflowId}
           />
-        )}
-        {readOnly && (
-           <RunButtonGroup actions={actions} state={state} />
-        )}
-        <GitHubStarsButton />
-        <UserMenu />
-      </Panel>
+          <div className="flex items-center gap-2">
+            {!workflowId && (
+              <>
+                <GitHubStarsButton />
+                <DeployButton />
+              </>
+            )}
+            <UserMenu />
+          </div>
+        </div>
+      </div>
 
       <WorkflowDialogsComponent actions={actions} state={state} />
     </>

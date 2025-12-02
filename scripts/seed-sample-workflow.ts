@@ -40,8 +40,8 @@ async function main() {
 
   const [workflow] = await db.insert(workflows).values({
     id: generateId(),
-    name: "Sample Operations Bridge",
-    description: "Diagnostic escalation workflow",
+    name: "Hello Workflow",
+    description: "Trigger → Log",
     userId: user.id,
     nodes: exampleWorkflow.nodes,
     edges: exampleWorkflow.edges,
@@ -57,6 +57,7 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
 
 
 

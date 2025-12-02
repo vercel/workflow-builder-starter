@@ -9,7 +9,7 @@
       },
       "data": {
         "label": "Manual Trigger",
-        "description": "Manually trigger the workflow",
+        "description": "Click 'Run' to execute the workflow",
         "type": "trigger",
         "config": {
           "triggerType": "Manual"
@@ -25,12 +25,13 @@
         "y": 200
       },
       "data": {
-        "label": "Log Escalation",
-        "description": "Log the escalation event",
+        "label": "Hello World",
+        "description": "Log a message to the console",
         "type": "action",
         "config": {
           "actionType": "Log",
-          "message": "Escalation triggered"
+          "logMessage": "👋 Hello from Vercel Workflow!",
+          "logLevel": "info"
         },
         "status": "idle"
       }

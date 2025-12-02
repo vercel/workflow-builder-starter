@@ -11,12 +11,17 @@ import {
   Play,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import type { JSX } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { getRelativeTime } from "@/lib/utils/time";
-import { currentWorkflowIdAtom } from "@/lib/workflow-store";
+import {
+  currentWorkflowIdAtom,
+  executionLogsAtom,
+  selectedExecutionIdAtom,
+} from "@/lib/workflow-store";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 
@@ -47,7 +52,91 @@ type WorkflowExecution = {
 type WorkflowRunsProps = {
   isActive?: boolean;
   onRefreshRef?: React.MutableRefObject<(() => Promise<void>) | null>;
+  onStartRun?: (executionId: string) => void;
 };
+
+// Helper to detect if output is a base64 image from generateImage step
+function isBase64ImageOutput(output: unknown): output is { base64: string } {
+  return (
+    typeof output === "object" &&
+    output !== null &&
+    "base64" in output &&
+    typeof (output as { base64: unknown }).base64 === "string" &&
+    (output as { base64: string }).base64.length > 100 // Base64 images are large
+  );
+}
+
+// Helper to convert execution logs to a map by nodeId for the global atom
+function createExecutionLogsMap(logs: ExecutionLog[]): Record<
+  string,
+  {
+    nodeId: string;
+    nodeName: string;
+    nodeType: string;
+    status: "pending" | "running" | "success" | "error";
+    output?: unknown;
+  }
+> {
+  const logsMap: Record<
+    string,
+    {
+      nodeId: string;
+      nodeName: string;
+      nodeType: string;
+      status: "pending" | "running" | "success" | "error";
+      output?: unknown;
+    }
+  > = {};
+  for (const log of logs) {
+    logsMap[log.nodeId] = {
+      nodeId: log.nodeId,
+      nodeName: log.nodeName,
+      nodeType: log.nodeType,
+      status: log.status,
+      output: log.output,
+    };
+  }
+  return logsMap;
+}
+
+// Reusable copy button component
+function CopyButton({
+  data,
+  isError = false,
+}: {
+  data: unknown;
+  isError?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const text = isError ? String(data) : JSON.stringify(data, null, 2);
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
+  };
+
+  return (
+    <Button
+      className="h-7 px-2"
+      onClick={handleCopy}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      {copied ? (
+        <Check className="h-3 w-3 text-green-600" />
+      ) : (
+        <Copy className="h-3 w-3" />
+      )}
+    </Button>
+  );
+}
 
 // Component for rendering individual execution log entries
 function ExecutionLogEntry({
@@ -67,33 +156,6 @@ function ExecutionLogEntry({
   isFirst: boolean;
   isLast: boolean;
 }) {
-  const [copiedInput, setCopiedInput] = useState(false);
-  const [copiedOutput, setCopiedOutput] = useState(false);
-  const [copiedError, setCopiedError] = useState(false);
-
-  const copyToClipboard = async (
-    data: unknown,
-    type: "input" | "output" | "error"
-  ) => {
-    try {
-      const text =
-        type === "error" ? String(data) : JSON.stringify(data, null, 2);
-      await navigator.clipboard.writeText(text);
-      if (type === "input") {
-        setCopiedInput(true);
-        setTimeout(() => setCopiedInput(false), 2000);
-      } else if (type === "output") {
-        setCopiedOutput(true);
-        setTimeout(() => setCopiedOutput(false), 2000);
-      } else {
-        setCopiedError(true);
-        setTimeout(() => setCopiedError(false), 2000);
-      }
-    } catch (error) {
-      console.error("Failed to copy:", error);
-    }
-  };
-
   return (
     <div className="relative flex gap-3" key={log.id}>
       {/* Timeline connector */}
@@ -154,22 +216,7 @@ function ExecutionLogEntry({
                   <div className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
                     Input
                   </div>
-                  <Button
-                    className="h-7 px-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyToClipboard(log.input, "input");
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {copiedInput ? (
-                      <Check className="h-3 w-3 text-green-600" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
+                  <CopyButton data={log.input} />
                 </div>
                 <pre className="overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed">
                   {JSON.stringify(log.input, null, 2)}
@@ -182,26 +229,24 @@ function ExecutionLogEntry({
                   <div className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
                     Output
                   </div>
-                  <Button
-                    className="h-7 px-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyToClipboard(log.output, "output");
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {copiedOutput ? (
-                      <Check className="h-3 w-3 text-green-600" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
+                  <CopyButton data={log.output} />
                 </div>
-                <pre className="overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed">
-                  {JSON.stringify(log.output, null, 2)}
-                </pre>
+                {isBase64ImageOutput(log.output) ? (
+                  <div className="overflow-hidden rounded-lg border bg-muted/50 p-3">
+                    <Image
+                      alt="AI generated output"
+                      className="max-h-96 w-auto rounded"
+                      height={384}
+                      src={`data:image/png;base64,${(log.output as { base64: string }).base64}`}
+                      unoptimized
+                      width={384}
+                    />
+                  </div>
+                ) : (
+                  <pre className="overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed">
+                    {JSON.stringify(log.output, null, 2)}
+                  </pre>
+                )}
               </div>
             )}
             {log.error && (
@@ -210,22 +255,7 @@ function ExecutionLogEntry({
                   <div className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
                     Error
                   </div>
-                  <Button
-                    className="h-7 px-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyToClipboard(log.error, "error");
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {copiedError ? (
-                      <Check className="h-3 w-3 text-green-600" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
+                  <CopyButton data={log.error} isError />
                 </div>
                 <pre className="overflow-auto rounded-lg border border-red-500/20 bg-red-500/5 p-3 font-mono text-red-600 text-xs leading-relaxed">
                   {log.error}
@@ -247,13 +277,21 @@ function ExecutionLogEntry({
 export function WorkflowRuns({
   isActive = false,
   onRefreshRef,
+  onStartRun,
 }: WorkflowRunsProps) {
   const [currentWorkflowId] = useAtom(currentWorkflowIdAtom);
+  const [selectedExecutionId, setSelectedExecutionId] = useAtom(
+    selectedExecutionIdAtom
+  );
+  const [, setExecutionLogs] = useAtom(executionLogsAtom);
   const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
   const [logs, setLogs] = useState<Record<string, ExecutionLog[]>>({});
   const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+
+  // Track which execution we've already auto-expanded to prevent loops
+  const autoExpandedExecutionRef = useRef<string | null>(null);
 
   const loadExecutions = useCallback(
     async (showLoading = true) => {
@@ -328,6 +366,89 @@ export function WorkflowRuns({
     []
   );
 
+  const loadExecutionLogs = useCallback(
+    async (executionId: string) => {
+      try {
+        const data = await api.workflow.getExecutionLogs(executionId);
+        const mappedLogs = mapNodeLabels(data.logs, data.execution.workflow);
+        setLogs((prev) => ({
+          ...prev,
+          [executionId]: mappedLogs,
+        }));
+
+        // Update global execution logs atom if this is the selected execution
+        if (executionId === selectedExecutionId) {
+          setExecutionLogs(createExecutionLogsMap(mappedLogs));
+        }
+      } catch (error) {
+        console.error("Failed to load execution logs:", error);
+        setLogs((prev) => ({ ...prev, [executionId]: [] }));
+      }
+    },
+    [mapNodeLabels, selectedExecutionId, setExecutionLogs]
+  );
+
+  // Notify parent when a new execution starts and auto-expand it
+  useEffect(() => {
+    if (executions.length === 0) {
+      return;
+    }
+
+    const latestExecution = executions[0];
+
+    // Check if this is a new running execution that we haven't auto-expanded yet
+    if (
+      latestExecution.status === "running" &&
+      latestExecution.id !== autoExpandedExecutionRef.current
+    ) {
+      // Mark this execution as auto-expanded
+      autoExpandedExecutionRef.current = latestExecution.id;
+
+      // Auto-select the new running execution
+      setSelectedExecutionId(latestExecution.id);
+
+      // Auto-expand the run
+      setExpandedRuns((prev) => {
+        const newExpanded = new Set(prev);
+        newExpanded.add(latestExecution.id);
+        return newExpanded;
+      });
+
+      // Load logs for the new execution
+      loadExecutionLogs(latestExecution.id);
+
+      // Notify parent
+      if (onStartRun) {
+        onStartRun(latestExecution.id);
+      }
+    }
+  }, [executions, setSelectedExecutionId, loadExecutionLogs, onStartRun]);
+
+  // Helper to refresh logs for a single execution
+  const refreshExecutionLogs = useCallback(
+    async (executionId: string) => {
+      try {
+        const logsData = await api.workflow.getExecutionLogs(executionId);
+        const mappedLogs = mapNodeLabels(
+          logsData.logs,
+          logsData.execution.workflow
+        );
+        setLogs((prev) => ({
+          ...prev,
+          [executionId]: mappedLogs,
+        }));
+
+        // Update global execution logs atom if this is the selected execution
+        if (executionId === selectedExecutionId) {
+          setExecutionLogs(createExecutionLogsMap(mappedLogs));
+        }
+      } catch (error) {
+        console.error(`Failed to refresh logs for ${executionId}:`, error);
+      }
+    },
+    [mapNodeLabels, selectedExecutionId, setExecutionLogs]
+  );
+
   // Poll for new executions when tab is active
   useEffect(() => {
     if (!(isActive && currentWorkflowId)) {
@@ -341,19 +462,7 @@ export function WorkflowRuns({
 
         // Also refresh logs for expanded runs
         for (const executionId of expandedRuns) {
-          try {
-            const logsData = await api.workflow.getExecutionLogs(executionId);
-            const mappedLogs = mapNodeLabels(
-              logsData.logs,
-              logsData.execution.workflow
-            );
-            setLogs((prev) => ({
-              ...prev,
-              [executionId]: mappedLogs,
-            }));
-          } catch (error) {
-            console.error(`Failed to refresh logs for ${executionId}:`, error);
-          }
+          await refreshExecutionLogs(executionId);
         }
       } catch (error) {
         console.error("Failed to poll executions:", error);
@@ -362,21 +471,7 @@ export function WorkflowRuns({
 
     const interval = setInterval(pollExecutions, 2000);
     return () => clearInterval(interval);
-  }, [isActive, currentWorkflowId, expandedRuns, mapNodeLabels]);
-
-  const loadExecutionLogs = async (executionId: string) => {
-    try {
-      const data = await api.workflow.getExecutionLogs(executionId);
-      const mappedLogs = mapNodeLabels(data.logs, data.execution.workflow);
-      setLogs((prev) => ({
-        ...prev,
-        [executionId]: mappedLogs,
-      }));
-    } catch (error) {
-      console.error("Failed to load execution logs:", error);
-      setLogs((prev) => ({ ...prev, [executionId]: [] }));
-    }
-  };
+  }, [isActive, currentWorkflowId, expandedRuns, refreshExecutionLogs]);
 
   const toggleRun = async (executionId: string) => {
     const newExpanded = new Set(expandedRuns);
@@ -384,9 +479,26 @@ export function WorkflowRuns({
       newExpanded.delete(executionId);
     } else {
       newExpanded.add(executionId);
+      // Load logs when expanding
       await loadExecutionLogs(executionId);
     }
     setExpandedRuns(newExpanded);
+  };
+
+  const selectRun = (executionId: string) => {
+    // If already selected, deselect it
+    if (selectedExecutionId === executionId) {
+      setSelectedExecutionId(null);
+      setExecutionLogs({});
+      return;
+    }
+
+    // Select the run without toggling expansion
+    setSelectedExecutionId(executionId);
+
+    // Update global execution logs atom with logs for this execution
+    const executionLogEntries = logs[executionId] || [];
+    setExecutionLogs(createExecutionLogsMap(executionLogEntries));
   };
 
   const toggleLog = (logId: string) => {
@@ -402,13 +514,13 @@ export function WorkflowRuns({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "success":
-        return <Check className="h-3 w-3 text-primary" />;
+        return <Check className="h-3 w-3 text-white" />;
       case "error":
-        return <X className="h-3 w-3 text-primary" />;
+        return <X className="h-3 w-3 text-white" />;
       case "running":
-        return <Loader2 className="h-3 w-3 animate-spin text-primary" />;
+        return <Loader2 className="h-3 w-3 animate-spin text-white" />;
       default:
-        return <Clock className="h-3 w-3 text-primary" />;
+        return <Clock className="h-3 w-3 text-white" />;
     }
   };
 
@@ -451,6 +563,7 @@ export function WorkflowRuns({
     <div className="space-y-3">
       {executions.map((execution, index) => {
         const isExpanded = expandedRuns.has(execution.id);
+        const isSelected = selectedExecutionId === execution.id;
         const executionLogs = (logs[execution.id] || []).sort((a, b) => {
           // Sort by startedAt to ensure first to last order
           return (
@@ -460,24 +573,34 @@ export function WorkflowRuns({
 
         return (
           <div
-            className="overflow-hidden rounded-lg border bg-card"
+            className={cn(
+              "overflow-hidden rounded-lg border bg-card transition-all",
+              isSelected &&
+                "ring-2 ring-primary ring-offset-2 ring-offset-background"
+            )}
             key={execution.id}
           >
-            <button
-              className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50"
-              onClick={() => toggleRun(execution.id)}
-              type="button"
-            >
-              <div
-                className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-0",
-                  getStatusDotClass(execution.status)
-                )}
+            <div className="flex w-full items-center gap-3 p-4">
+              <button
+                className="flex size-5 shrink-0 items-center justify-center rounded-full border-0 transition-colors hover:bg-muted"
+                onClick={() => toggleRun(execution.id)}
+                type="button"
               >
-                {getStatusIcon(execution.status)}
-              </div>
+                <div
+                  className={cn(
+                    "flex size-5 items-center justify-center rounded-full border-0",
+                    getStatusDotClass(execution.status)
+                  )}
+                >
+                  {getStatusIcon(execution.status)}
+                </div>
+              </button>
 
-              <div className="min-w-0 flex-1">
+              <button
+                className="min-w-0 flex-1 text-left transition-colors hover:opacity-80"
+                onClick={() => selectRun(execution.id)}
+                type="button"
+              >
                 <div className="mb-1 flex items-center gap-2">
                   <span className="font-semibold text-sm">
                     Run #{executions.length - index}
@@ -505,14 +628,20 @@ export function WorkflowRuns({
                     </>
                   )}
                 </div>
-              </div>
+              </button>
 
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-            </button>
+              <button
+                className="flex shrink-0 items-center justify-center rounded p-1 transition-colors hover:bg-muted"
+                onClick={() => toggleRun(execution.id)}
+                type="button"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+            </div>
 
             {isExpanded && (
               <div className="border-t bg-muted/20">
