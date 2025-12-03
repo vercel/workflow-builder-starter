@@ -253,14 +253,26 @@ export const PanelInner = () => {
 
   const handleUpdateConfig = (key: string, value: string) => {
     if (selectedNode) {
-      let newConfig = { ...selectedNode.data.config, [key]: value };
+      let newConfig: Record<string, unknown>;
 
-      // Set defaults when actionType changes to HTTP Request
-      if (key === "actionType" && value === "HTTP Request") {
+      if (key === "actionType") {
+        // Reset config when actionType changes to prevent stale field bleed
         newConfig = {
-          ...newConfig,
-          httpMethod: newConfig.httpMethod || "POST",
+          actionType: value,
         };
+
+        // Preserve integrationId if it exists (integration binding should persist)
+        if (selectedNode.data.config?.integrationId) {
+          newConfig.integrationId = selectedNode.data.config.integrationId;
+        }
+
+        // Set action-type-specific defaults
+        if (value === "HTTP Request") {
+          newConfig.httpMethod = "POST";
+        }
+      } else {
+        // Normal update: spread existing config
+        newConfig = { ...selectedNode.data.config, [key]: value };
       }
 
       updateNodeData({ id: selectedNode.id, data: { config: newConfig } });
