@@ -7,6 +7,23 @@ import "server-only";
 
 import { redactSensitiveData } from "../utils/redact";
 
+/**
+ * Get the API base URL for logging requests.
+ * Supports Vercel deployments and falls back to localhost for local dev.
+ */
+function getApiBaseUrl(): string {
+  // Explicit override
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  // Vercel deployment
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  // Local development fallback
+  return "http://localhost:3000";
+}
+
 export type StepContext = {
   executionId?: string;
   nodeId: string;
@@ -42,7 +59,7 @@ async function logStepStart(
     const redactedInput = redactSensitiveData(input);
 
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`,
+      `${getApiBaseUrl()}/api/workflow-log`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,7 +107,7 @@ async function logStepComplete(
   try {
     const redactedOutput = redactSensitiveData(output);
 
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`, {
+    await fetch(`${getApiBaseUrl()}/api/workflow-log`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -131,7 +148,7 @@ export async function logWorkflowComplete(options: {
   try {
     const redactedOutput = redactSensitiveData(options.output);
 
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`, {
+    await fetch(`${getApiBaseUrl()}/api/workflow-log`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
