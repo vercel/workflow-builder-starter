@@ -2,15 +2,21 @@
 /**
  * Plugin Scaffolding Script
  *
- * Creates a new plugin from templates using interactive prompts.
+ * Creates a new plugin from templates. Supports both interactive prompts
+ * and non-interactive CLI arguments.
  *
  * Usage:
- *   pnpm create-plugin
+ *   pnpm create-plugin                           # Interactive mode
+ *   pnpm create-plugin --name resend \           # Non-interactive mode
+ *     --description "Send emails via Resend" \
+ *     --action send-email \
+ *     --action-description "Send an email"
  */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseArgs } from "node:util";
 import { input } from "@inquirer/prompts";
 
 const PLUGINS_DIR = join(process.cwd(), "plugins");
@@ -151,6 +157,155 @@ function getTemplateFiles(actionSlug: string) {
 }
 
 /**
+ * Parse CLI arguments for non-interactive mode
+ */
+function parseCliArgs(): PluginConfig | null {
+  try {
+    const { values } = parseArgs({
+      options: {
+        name: { type: "string", short: "n" },
+        description: { type: "string", short: "d" },
+        action: { type: "string", short: "a" },
+        "action-description": { type: "string" },
+        help: { type: "boolean", short: "h" },
+      },
+      allowPositionals: false,
+    });
+
+    if (values.help) {
+      console.log(`
+Usage: pnpm create-plugin [options]
+
+Options:
+  -n, --name <name>                Integration name (e.g., "resend")
+  -d, --description <desc>         Integration description
+  -a, --action <action>            Action name (e.g., "send-email")
+      --action-description <desc>  Action description
+  -h, --help                       Show this help message
+
+Examples:
+  pnpm create-plugin                           # Interactive mode
+  pnpm create-plugin --name resend \\
+    --description "Send emails via Resend" \\
+    --action send-email \\
+    --action-description "Send an email"
+`);
+      process.exit(0);
+    }
+
+    // If any args provided, require all of them
+    if (values.name || values.description || values.action || values["action-description"]) {
+      if (!values.name || !values.description || !values.action || !values["action-description"]) {
+        console.error("Error: When using CLI arguments, all options are required:");
+        console.error("  --name, --description, --action, --action-description");
+        console.error("\nRun with --help for usage information.\n");
+        process.exit(1);
+      }
+      return {
+        integrationName: values.name,
+        integrationDescription: values.description,
+        actionName: values.action,
+        actionDescription: values["action-description"],
+      };
+    }
+
+    return null; // No args provided, use interactive mode
+  } catch {
+    return null; // Parse error, fall back to interactive
+  }
+}
+
+/**
+ * Validate plugin config (used for both CLI and interactive modes)
+ */
+function validateConfig(config: PluginConfig): string | null {
+  const { integrationName, integrationDescription, actionName, actionDescription } = config;
+
+  if (!integrationName.trim()) return "Integration name is required";
+  if (UNSAFE_PATH_REGEX.test(integrationName)) {
+    return "Integration name cannot contain path separators (/, \\) or '..'";
+  }
+  const intCamel = toCamelCase(integrationName);
+  const intPascal = toPascalCase(integrationName);
+  if (!(isValidIdentifier(intCamel) && isValidIdentifier(intPascal))) {
+    return `Integration name must produce valid JS identifiers. "${integrationName}" -> "${intCamel}"`;
+  }
+  const kebab = toKebabCase(integrationName);
+  const dir = join(PLUGINS_DIR, kebab);
+  if (existsSync(dir)) {
+    return `Plugin already exists at plugins/${kebab}/`;
+  }
+
+  if (!integrationDescription.trim()) return "Integration description is required";
+
+  if (!actionName.trim()) return "Action name is required";
+  if (UNSAFE_PATH_REGEX.test(actionName)) {
+    return "Action name cannot contain path separators (/, \\) or '..'";
+  }
+  const actCamel = toCamelCase(actionName);
+  const actPascal = toPascalCase(actionName);
+  if (!(isValidIdentifier(actCamel) && isValidIdentifier(actPascal))) {
+    return `Action name must produce valid JS identifiers. "${actionName}" -> "${actCamel}"`;
+  }
+
+  if (!actionDescription.trim()) return "Action description is required";
+
+  return null;
+}
+
+/**
+ * Prompt for plugin details interactively
+ */
+async function promptForConfig(): Promise<PluginConfig> {
+  const integrationName = await input({
+    message: "Integration Name:",
+    validate: (value) => {
+      if (!value.trim()) return "Integration name is required";
+      if (UNSAFE_PATH_REGEX.test(value)) {
+        return "Name cannot contain path separators (/, \\) or '..'";
+      }
+      const camel = toCamelCase(value);
+      const pascal = toPascalCase(value);
+      if (!(isValidIdentifier(camel) && isValidIdentifier(pascal))) {
+        return `Must produce valid JS identifiers. "${value}" -> "${camel}" (camelCase)`;
+      }
+      const kebab = toKebabCase(value);
+      const dir = join(PLUGINS_DIR, kebab);
+      if (existsSync(dir)) return `Plugin already exists at plugins/${kebab}/`;
+      return true;
+    },
+  });
+
+  const integrationDescription = await input({
+    message: "Integration Description (<10 words):",
+    validate: (value) => (value.trim() ? true : "Integration description is required"),
+  });
+
+  const actionName = await input({
+    message: "Action Name:",
+    validate: (value) => {
+      if (!value.trim()) return "Action name is required";
+      if (UNSAFE_PATH_REGEX.test(value)) {
+        return "Name cannot contain path separators (/, \\) or '..'";
+      }
+      const camel = toCamelCase(value);
+      const pascal = toPascalCase(value);
+      if (!(isValidIdentifier(camel) && isValidIdentifier(pascal))) {
+        return `Must produce valid JS identifiers. "${value}" -> "${camel}" (camelCase)`;
+      }
+      return true;
+    },
+  });
+
+  const actionDescription = await input({
+    message: "Action Description (<10 words):",
+    validate: (value) => (value.trim() ? true : "Action description is required"),
+  });
+
+  return { integrationName, integrationDescription, actionName, actionDescription };
+}
+
+/**
  * Main execution
  */
 async function main(): Promise<void> {
@@ -163,77 +318,24 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Prompt for plugin details
-  const integrationName = await input({
-    message: "Integration Name:",
-    validate: (value) => {
-      if (!value.trim()) {
-        return "Integration name is required";
-      }
-      if (UNSAFE_PATH_REGEX.test(value)) {
-        return "Name cannot contain path separators (/, \\) or '..'";
-      }
-      const camel = toCamelCase(value);
-      const pascal = toPascalCase(value);
-      if (!(isValidIdentifier(camel) && isValidIdentifier(pascal))) {
-        return `Integration name must produce valid JavaScript identifiers. "${value}" converts to "${camel}" (camelCase) and "${pascal}" (PascalCase). Use only letters, numbers, underscores, and dollar signs.`;
-      }
-      const kebab = toKebabCase(value);
-      const dir = join(PLUGINS_DIR, kebab);
-      if (existsSync(dir)) {
-        return `Plugin already exists at plugins/${kebab}/`;
-      }
-      return true;
-    },
-  });
+  // Try CLI args first, fall back to interactive prompts
+  let answers = parseCliArgs();
+  
+  if (answers) {
+    // Validate CLI-provided config
+    const error = validateConfig(answers);
+    if (error) {
+      console.error(`Error: ${error}\n`);
+      process.exit(1);
+    }
+    console.log("Using CLI arguments (non-interactive mode)\n");
+  } else {
+    // Interactive mode
+    answers = await promptForConfig();
+  }
 
-  const integrationDescription = await input({
-    message: "Integration Description (<10 words):",
-    validate: (value) => {
-      if (!value.trim()) {
-        return "Integration description is required";
-      }
-      return true;
-    },
-  });
-
-  const actionName = await input({
-    message: "Action Name:",
-    validate: (value) => {
-      if (!value.trim()) {
-        return "Action name is required";
-      }
-      if (UNSAFE_PATH_REGEX.test(value)) {
-        return "Name cannot contain path separators (/, \\) or '..'";
-      }
-      const camel = toCamelCase(value);
-      const pascal = toPascalCase(value);
-      if (!(isValidIdentifier(camel) && isValidIdentifier(pascal))) {
-        return `Action name must produce valid JavaScript identifiers. "${value}" converts to "${camel}" (camelCase) and "${pascal}" (PascalCase). Use only letters, numbers, underscores, and dollar signs.`;
-      }
-      return true;
-    },
-  });
-
-  const actionDescription = await input({
-    message: "Action Description (<10 words):",
-    validate: (value) => {
-      if (!value.trim()) {
-        return "Action description is required";
-      }
-      return true;
-    },
-  });
-
-  const answers: PluginConfig = {
-    integrationName,
-    integrationDescription,
-    actionName,
-    actionDescription,
-  };
-
-  const pluginName = toKebabCase(integrationName);
-  const actionSlug = toKebabCase(actionName);
+  const pluginName = toKebabCase(answers.integrationName);
+  const actionSlug = toKebabCase(answers.actionName);
   const pluginDir = join(PLUGINS_DIR, pluginName);
 
   console.log(`\nGenerating plugin: ${pluginName}`);
