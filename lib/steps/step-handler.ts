@@ -58,23 +58,20 @@ async function logStepStart(
   try {
     const redactedInput = redactSensitiveData(input);
 
-    const response = await fetch(
-      `${getApiBaseUrl()}/api/workflow-log`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "start",
-          data: {
-            executionId: context.executionId,
-            nodeId: context.nodeId,
-            nodeName: context.nodeName,
-            nodeType: context.nodeType,
-            input: redactedInput,
-          },
-        }),
-      }
-    );
+    const response = await fetch(`${getApiBaseUrl()}/api/workflow-log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "start",
+        data: {
+          executionId: context.executionId,
+          nodeId: context.nodeId,
+          nodeName: context.nodeName,
+          nodeType: context.nodeType,
+          input: redactedInput,
+        },
+      }),
+    });
 
     if (response.ok) {
       const result = await response.json();

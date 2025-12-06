@@ -6,6 +6,7 @@ import type { IntegrationConfig, IntegrationType } from "../types/integration";
 
 // Re-export for backward compatibility
 export type { IntegrationConfig, IntegrationType } from "../types/integration";
+
 import { db } from "./index";
 import { integrations, type NewIntegration } from "./schema";
 

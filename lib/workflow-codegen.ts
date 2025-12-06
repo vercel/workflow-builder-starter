@@ -116,7 +116,10 @@ export function generateWorkflowCode(
     return `\${${varName}${accessPath}}`;
   }
 
-  function processAtFormatForExpression(trimmed: string, match: string): string {
+  function processAtFormatForExpression(
+    trimmed: string,
+    match: string
+  ): string {
     const withoutAt = trimmed.substring(1);
     const colonIndex = withoutAt.indexOf(":");
     if (colonIndex === -1) return match;
@@ -134,7 +137,10 @@ export function generateWorkflowCode(
     return `${varName}${accessPath}`;
   }
 
-  function processDollarFormatForExpression(trimmed: string, match: string): string {
+  function processDollarFormatForExpression(
+    trimmed: string,
+    match: string
+  ): string {
     const withoutDollar = trimmed.substring(1);
     const parts = withoutDollar.split(".");
     const nodeId = parts[0];
@@ -165,8 +171,10 @@ export function generateWorkflowCode(
     const cleaned = removeInvisibleChars(condition);
     const converted = cleaned.replace(TEMPLATE_PATTERN, (match, expression) => {
       const trimmed = expression.trim();
-      if (trimmed.startsWith("@")) return processAtFormatForExpression(trimmed, match);
-      if (trimmed.startsWith("$")) return processDollarFormatForExpression(trimmed, match);
+      if (trimmed.startsWith("@"))
+        return processAtFormatForExpression(trimmed, match);
+      if (trimmed.startsWith("$"))
+        return processDollarFormatForExpression(trimmed, match);
       return match;
     });
 
@@ -227,7 +235,8 @@ export function generateWorkflowCode(
     varName: string
   ): string[] {
     const config = node.data.config || {};
-    const endpoint = (config.endpoint as string) || "https://api.example.com/endpoint";
+    const endpoint =
+      (config.endpoint as string) || "https://api.example.com/endpoint";
     const method = (config.httpMethod as string) || "POST";
 
     imports.add("import { httpRequestStep } from './steps/http-request';");
@@ -274,9 +283,8 @@ export function generateWorkflowCode(
       });
     }
 
-    const wrapActionCall = (actionLines: string[]): string[] => {
-      return outputIsUsed ? actionLines : removeVariableAssignment(actionLines);
-    };
+    const wrapActionCall = (actionLines: string[]): string[] =>
+      outputIsUsed ? actionLines : removeVariableAssignment(actionLines);
 
     // Built-in action types
     // ┌──────────────────────────────────────────────────────────────────────┐
@@ -286,11 +294,15 @@ export function generateWorkflowCode(
     switch (actionType) {
       case "Log":
         imports.add("import { logStep } from './steps/log';");
-        lines.push(...wrapActionCall(generateLogActionCode(node, indent, varName)));
+        lines.push(
+          ...wrapActionCall(generateLogActionCode(node, indent, varName))
+        );
         break;
 
       case "HTTP Request":
-        lines.push(...wrapActionCall(generateHTTPActionCode(node, indent, varName)));
+        lines.push(
+          ...wrapActionCall(generateHTTPActionCode(node, indent, varName))
+        );
         break;
 
       default:
@@ -324,7 +336,9 @@ export function generateWorkflowCode(
     if (nextNodes.length > 0) {
       const trueNode = nextNodes[0];
       const falseNode = nextNodes[1];
-      const convertedCondition = condition ? convertConditionToJS(condition) : "true";
+      const convertedCondition = condition
+        ? convertConditionToJS(condition)
+        : "true";
 
       lines.push(`${indent}if (${convertedCondition}) {`);
       if (trueNode) {
@@ -422,7 +436,12 @@ export function generateWorkflowCode(
         if (actionType === "Condition") {
           return generateConditionNodeCode(node, nodeId, indent);
         }
-        const actionLines = generateActionNodeCode(node, nodeId, indent, varName);
+        const actionLines = generateActionNodeCode(
+          node,
+          nodeId,
+          indent,
+          varName
+        );
         return processNextNodes(nodeId, actionLines, indent);
       }
 

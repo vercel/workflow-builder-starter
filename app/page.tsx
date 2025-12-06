@@ -2,17 +2,17 @@
 
 import { ReactFlowProvider } from "@xyflow/react";
 import { useAtomValue } from "jotai";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { WorkflowCanvas } from "@/components/workflow/workflow-canvas";
 import { WorkflowToolbar } from "@/components/workflow/workflow-toolbar";
-import { api, ApiError } from "@/lib/api-client";
+import { ApiError, api } from "@/lib/api-client";
 import { authClient, useSession } from "@/lib/auth-client";
 import {
   currentWorkflowIdAtom,
-  type WorkflowNode,
   type WorkflowEdge,
+  type WorkflowNode,
 } from "@/lib/workflow-store";
 import exampleWorkflow from "../example-workflow.json";
 
@@ -69,7 +69,8 @@ const Home = () => {
           router.replace(`/workflows/${helloWorkflow.id}`);
         } else {
           const mostRecent = workflows.sort(
-            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+            (a, b) =>
+              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
           )[0];
           router.replace(`/workflows/${mostRecent.id}`);
         }
@@ -103,7 +104,10 @@ const Home = () => {
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <p className="text-destructive">{error}</p>
-          <button onClick={() => window.location.reload()} className="text-primary underline">
+          <button
+            className="text-primary underline"
+            onClick={() => window.location.reload()}
+          >
             Retry
           </button>
         </div>

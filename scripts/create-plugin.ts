@@ -194,10 +194,26 @@ Examples:
     }
 
     // If any args provided, require all of them
-    if (values.name || values.description || values.action || values["action-description"]) {
-      if (!values.name || !values.description || !values.action || !values["action-description"]) {
-        console.error("Error: When using CLI arguments, all options are required:");
-        console.error("  --name, --description, --action, --action-description");
+    if (
+      values.name ||
+      values.description ||
+      values.action ||
+      values["action-description"]
+    ) {
+      if (
+        !(
+          values.name &&
+          values.description &&
+          values.action &&
+          values["action-description"]
+        )
+      ) {
+        console.error(
+          "Error: When using CLI arguments, all options are required:"
+        );
+        console.error(
+          "  --name, --description, --action, --action-description"
+        );
         console.error("\nRun with --help for usage information.\n");
         process.exit(1);
       }
@@ -219,7 +235,12 @@ Examples:
  * Validate plugin config (used for both CLI and interactive modes)
  */
 function validateConfig(config: PluginConfig): string | null {
-  const { integrationName, integrationDescription, actionName, actionDescription } = config;
+  const {
+    integrationName,
+    integrationDescription,
+    actionName,
+    actionDescription,
+  } = config;
 
   if (!integrationName.trim()) return "Integration name is required";
   if (UNSAFE_PATH_REGEX.test(integrationName)) {
@@ -236,7 +257,8 @@ function validateConfig(config: PluginConfig): string | null {
     return `Plugin already exists at plugins/${kebab}/`;
   }
 
-  if (!integrationDescription.trim()) return "Integration description is required";
+  if (!integrationDescription.trim())
+    return "Integration description is required";
 
   if (!actionName.trim()) return "Action name is required";
   if (UNSAFE_PATH_REGEX.test(actionName)) {
@@ -278,7 +300,8 @@ async function promptForConfig(): Promise<PluginConfig> {
 
   const integrationDescription = await input({
     message: "Integration Description (<10 words):",
-    validate: (value) => (value.trim() ? true : "Integration description is required"),
+    validate: (value) =>
+      value.trim() ? true : "Integration description is required",
   });
 
   const actionName = await input({
@@ -299,10 +322,16 @@ async function promptForConfig(): Promise<PluginConfig> {
 
   const actionDescription = await input({
     message: "Action Description (<10 words):",
-    validate: (value) => (value.trim() ? true : "Action description is required"),
+    validate: (value) =>
+      value.trim() ? true : "Action description is required",
   });
 
-  return { integrationName, integrationDescription, actionName, actionDescription };
+  return {
+    integrationName,
+    integrationDescription,
+    actionName,
+    actionDescription,
+  };
 }
 
 /**
@@ -320,7 +349,7 @@ async function main(): Promise<void> {
 
   // Try CLI args first, fall back to interactive prompts
   let answers = parseCliArgs();
-  
+
   if (answers) {
     // Validate CLI-provided config
     const error = validateConfig(answers);
