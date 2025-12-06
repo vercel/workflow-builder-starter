@@ -87,7 +87,9 @@ export function generateWorkflowCode(
   function processAtFormat(trimmed: string, match: string): string {
     const withoutAt = trimmed.substring(1);
     const colonIndex = withoutAt.indexOf(":");
-    if (colonIndex === -1) return match;
+    if (colonIndex === -1) {
+      return match;
+    }
 
     const nodeId = withoutAt.substring(0, colonIndex);
     const rest = withoutAt.substring(colonIndex + 1);
@@ -95,8 +97,12 @@ export function generateWorkflowCode(
     const fieldPath = dotIndex !== -1 ? rest.substring(dotIndex + 1) : "";
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) return match;
-    if (!fieldPath) return `\${${varName}}`;
+    if (!varName) {
+      return match;
+    }
+    if (!fieldPath) {
+      return `\${${varName}}`;
+    }
 
     const accessPath = buildAccessPath(fieldPath);
     return `\${${varName}${accessPath}}`;
@@ -109,8 +115,12 @@ export function generateWorkflowCode(
     const fieldPath = parts.slice(1).join(".");
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) return match;
-    if (!fieldPath) return `\${${varName}}`;
+    if (!varName) {
+      return match;
+    }
+    if (!fieldPath) {
+      return `\${${varName}}`;
+    }
 
     const accessPath = buildAccessPath(fieldPath);
     return `\${${varName}${accessPath}}`;
@@ -122,7 +132,9 @@ export function generateWorkflowCode(
   ): string {
     const withoutAt = trimmed.substring(1);
     const colonIndex = withoutAt.indexOf(":");
-    if (colonIndex === -1) return match;
+    if (colonIndex === -1) {
+      return match;
+    }
 
     const nodeId = withoutAt.substring(0, colonIndex);
     const rest = withoutAt.substring(colonIndex + 1);
@@ -130,8 +142,12 @@ export function generateWorkflowCode(
     const fieldPath = dotIndex !== -1 ? rest.substring(dotIndex + 1) : "";
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) return match;
-    if (!fieldPath) return varName;
+    if (!varName) {
+      return match;
+    }
+    if (!fieldPath) {
+      return varName;
+    }
 
     const accessPath = buildAccessPath(fieldPath);
     return `${varName}${accessPath}`;
@@ -147,34 +163,48 @@ export function generateWorkflowCode(
     const fieldPath = parts.slice(1).join(".");
 
     const varName = nodeIdToVarName.get(nodeId);
-    if (!varName) return match;
-    if (!fieldPath) return varName;
+    if (!varName) {
+      return match;
+    }
+    if (!fieldPath) {
+      return varName;
+    }
 
     const accessPath = buildAccessPath(fieldPath);
     return `${varName}${accessPath}`;
   }
 
   function convertTemplateToJS(template: string): string {
-    if (!template || typeof template !== "string") return template;
+    if (!template || typeof template !== "string") {
+      return template;
+    }
 
     return template.replace(TEMPLATE_PATTERN, (match, expression) => {
       const trimmed = expression.trim();
-      if (trimmed.startsWith("@")) return processAtFormat(trimmed, match);
-      if (trimmed.startsWith("$")) return processDollarFormat(trimmed, match);
+      if (trimmed.startsWith("@")) {
+        return processAtFormat(trimmed, match);
+      }
+      if (trimmed.startsWith("$")) {
+        return processDollarFormat(trimmed, match);
+      }
       return match;
     });
   }
 
   function convertConditionToJS(condition: string): string {
-    if (!condition || typeof condition !== "string") return condition;
+    if (!condition || typeof condition !== "string") {
+      return condition;
+    }
 
     const cleaned = removeInvisibleChars(condition);
     const converted = cleaned.replace(TEMPLATE_PATTERN, (match, expression) => {
       const trimmed = expression.trim();
-      if (trimmed.startsWith("@"))
+      if (trimmed.startsWith("@")) {
         return processAtFormatForExpression(trimmed, match);
-      if (trimmed.startsWith("$"))
+      }
+      if (trimmed.startsWith("$")) {
         return processDollarFormatForExpression(trimmed, match);
+      }
       return match;
     });
 
@@ -367,7 +397,9 @@ export function generateWorkflowCode(
     varName: string,
     indent: string
   ): string[] {
-    if (!usedNodeOutputs.has(nodeId)) return [];
+    if (!usedNodeOutputs.has(nodeId)) {
+      return [];
+    }
 
     const lines: string[] = [];
     lines.push(`${indent}// Trigger: ${node.data.label}`);
@@ -404,6 +436,7 @@ export function generateWorkflowCode(
   /**
    * Generate code for a single node
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: code generation requires handling multiple node types
   function generateNodeCode(nodeId: string, indent = "  "): string[] {
     if (visited.has(nodeId)) {
       return [`${indent}// Already processed: ${nodeId}`];
@@ -411,7 +444,9 @@ export function generateWorkflowCode(
 
     visited.add(nodeId);
     const node = nodeMap.get(nodeId);
-    if (!node) return [];
+    if (!node) {
+      return [];
+    }
 
     const varName =
       nodeIdToVarName.get(nodeId) ||

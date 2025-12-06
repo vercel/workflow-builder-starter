@@ -443,7 +443,7 @@ export function generateWorkflowSDKCode(
   // Always import sleep and FatalError
   imports.add("import { sleep, FatalError } from 'workflow';");
 
-  function buildEmailParams(config: Record<string, unknown>): string[] {
+  function _buildEmailParams(config: Record<string, unknown>): string[] {
     imports.add("import { Resend } from 'resend';");
     return [
       `fromEmail: process.env.RESEND_FROM_EMAIL || 'noreply@example.com'`,
@@ -454,7 +454,7 @@ export function generateWorkflowSDKCode(
     ];
   }
 
-  function buildSlackParams(config: Record<string, unknown>): string[] {
+  function _buildSlackParams(config: Record<string, unknown>): string[] {
     imports.add("import { WebClient } from '@slack/web-api';");
     return [
       `slackChannel: \`${convertTemplateToJS((config.slackChannel as string) || "#general")}\``,
@@ -463,7 +463,7 @@ export function generateWorkflowSDKCode(
     ];
   }
 
-  function buildTicketParams(config: Record<string, unknown>): string[] {
+  function _buildTicketParams(config: Record<string, unknown>): string[] {
     imports.add("import { LinearClient } from '@linear/sdk';");
     const params = [
       `ticketTitle: \`${convertTemplateToJS((config.ticketTitle as string) || "New Issue")}\``,
@@ -476,7 +476,7 @@ export function generateWorkflowSDKCode(
     return params;
   }
 
-  function buildAITextParams(config: Record<string, unknown>): string[] {
+  function _buildAITextParams(config: Record<string, unknown>): string[] {
     imports.add("import { generateText } from 'ai';");
     const modelId = (config.aiModel as string) || "meta/llama-4-scout";
 
@@ -505,7 +505,7 @@ export function generateWorkflowSDKCode(
     ];
   }
 
-  function buildAIImageParams(config: Record<string, unknown>): string[] {
+  function _buildAIImageParams(config: Record<string, unknown>): string[] {
     imports.add(
       "import { experimental_generateImage as generateImage } from 'ai';"
     );
@@ -543,7 +543,7 @@ export function generateWorkflowSDKCode(
     ];
   }
 
-  function buildFirecrawlParams(
+  function _buildFirecrawlParams(
     actionType: string,
     config: Record<string, unknown>
   ): string[] {

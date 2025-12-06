@@ -25,11 +25,16 @@ const Home = () => {
   const initRef = useRef(false);
 
   useEffect(() => {
-    if (initRef.current) return;
-    if (isPending) return;
+    if (initRef.current) {
+      return;
+    }
+    if (isPending) {
+      return;
+    }
 
     initRef.current = true;
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: initialization requires multiple conditional flows
     const init = async () => {
       try {
         // Sign in anonymously if no session
@@ -107,6 +112,7 @@ const Home = () => {
           <button
             className="text-primary underline"
             onClick={() => window.location.reload()}
+            type="button"
           >
             Retry
           </button>

@@ -242,7 +242,9 @@ function validateConfig(config: PluginConfig): string | null {
     actionDescription,
   } = config;
 
-  if (!integrationName.trim()) return "Integration name is required";
+  if (!integrationName.trim()) {
+    return "Integration name is required";
+  }
   if (UNSAFE_PATH_REGEX.test(integrationName)) {
     return "Integration name cannot contain path separators (/, \\) or '..'";
   }
@@ -257,10 +259,13 @@ function validateConfig(config: PluginConfig): string | null {
     return `Plugin already exists at plugins/${kebab}/`;
   }
 
-  if (!integrationDescription.trim())
+  if (!integrationDescription.trim()) {
     return "Integration description is required";
+  }
 
-  if (!actionName.trim()) return "Action name is required";
+  if (!actionName.trim()) {
+    return "Action name is required";
+  }
   if (UNSAFE_PATH_REGEX.test(actionName)) {
     return "Action name cannot contain path separators (/, \\) or '..'";
   }
@@ -270,7 +275,9 @@ function validateConfig(config: PluginConfig): string | null {
     return `Action name must produce valid JS identifiers. "${actionName}" -> "${actCamel}"`;
   }
 
-  if (!actionDescription.trim()) return "Action description is required";
+  if (!actionDescription.trim()) {
+    return "Action description is required";
+  }
 
   return null;
 }
@@ -282,7 +289,9 @@ async function promptForConfig(): Promise<PluginConfig> {
   const integrationName = await input({
     message: "Integration Name:",
     validate: (value) => {
-      if (!value.trim()) return "Integration name is required";
+      if (!value.trim()) {
+        return "Integration name is required";
+      }
       if (UNSAFE_PATH_REGEX.test(value)) {
         return "Name cannot contain path separators (/, \\) or '..'";
       }
@@ -293,7 +302,9 @@ async function promptForConfig(): Promise<PluginConfig> {
       }
       const kebab = toKebabCase(value);
       const dir = join(PLUGINS_DIR, kebab);
-      if (existsSync(dir)) return `Plugin already exists at plugins/${kebab}/`;
+      if (existsSync(dir)) {
+        return `Plugin already exists at plugins/${kebab}/`;
+      }
       return true;
     },
   });
@@ -307,7 +318,9 @@ async function promptForConfig(): Promise<PluginConfig> {
   const actionName = await input({
     message: "Action Name:",
     validate: (value) => {
-      if (!value.trim()) return "Action name is required";
+      if (!value.trim()) {
+        return "Action name is required";
+      }
       if (UNSAFE_PATH_REGEX.test(value)) {
         return "Name cannot contain path separators (/, \\) or '..'";
       }
