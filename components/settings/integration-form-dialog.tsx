@@ -72,7 +72,7 @@ export function IntegrationFormDialog({
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<IntegrationFormData>({
     name: "",
-    type: preselectedType || "resend",
+    type: preselectedType || "database",
     config: {},
   });
 
@@ -86,7 +86,7 @@ export function IntegrationFormDialog({
     } else {
       setFormData({
         name: "",
-        type: preselectedType || "resend",
+        type: preselectedType || "database",
         config: {},
       });
     }

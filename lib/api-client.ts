@@ -3,6 +3,7 @@
  * Replaces server actions with API endpoints
  */
 
+import type { IntegrationConfig, IntegrationType } from "./types/integration";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
 
 // Workflow data types
@@ -308,24 +309,6 @@ export const aiApi = {
       reader.releaseLock();
     }
   },
-};
-
-// Integration types
-export type IntegrationType =
-  | "resend"
-  | "linear"
-  | "slack"
-  | "database"
-  | "ai-gateway"
-  | "firecrawl";
-
-export type IntegrationConfig = {
-  apiKey?: string;
-  fromEmail?: string;
-  teamId?: string;
-  url?: string;
-  openaiApiKey?: string;
-  firecrawlApiKey?: string;
 };
 
 export type Integration = {
