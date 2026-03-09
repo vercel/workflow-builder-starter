@@ -280,8 +280,8 @@ export function generateWorkflowCode(
 
     // Built-in action types
     // ┌──────────────────────────────────────────────────────────────────────┐
-    // │ LESSON 3: Add case "Send Email" here                                 │
-    // │ LESSON 6: Add your custom action case here                           │
+    // │ LESSON 3+: Plugin actions come from the plugin system and generated   │
+    // │ files. Keep built-in starter actions minimal and learner-friendly.    │
     // └──────────────────────────────────────────────────────────────────────┘
     switch (actionType) {
       case "Log":

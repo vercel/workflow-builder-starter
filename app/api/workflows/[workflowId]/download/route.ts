@@ -139,33 +139,9 @@ export async function POST(request: Request) {
  * Get npm dependencies based on workflow nodes
  */
 function getIntegrationDependencies(
-  nodes: WorkflowNode[]
+  _nodes: WorkflowNode[]
 ): Record<string, string> {
-  const deps: Record<string, string> = {};
-
-  for (const node of nodes) {
-    const actionType = node.data.config?.actionType as string;
-
-    if (actionType === "Send Email") {
-      deps.resend = "^6.4.0";
-    } else if (actionType === "Create Ticket" || actionType === "Find Issues") {
-      deps["@linear/sdk"] = "^63.2.0";
-    } else if (actionType === "Send Slack Message") {
-      deps["@slack/web-api"] = "^7.12.0";
-    } else if (
-      actionType === "Generate Text" ||
-      actionType === "Generate Image"
-    ) {
-      deps.ai = "^5.0.86";
-      deps.openai = "^6.8.0";
-      deps["@google/genai"] = "^1.28.0";
-      deps.zod = "^4.1.12";
-    } else if (actionType === "Scrape" || actionType === "Search") {
-      deps["@mendable/firecrawl-js"] = "^4.6.2";
-    }
-  }
-
-  return deps;
+  return {};
 }
 
 /**
@@ -305,24 +281,9 @@ For more information, visit the [Workflow documentation](https://workflow.is).
 
     // Add .env.example file
     allFiles[".env.example"] = `# Add your environment variables here
-# For Resend email integration
-RESEND_API_KEY=your_resend_api_key
-
-# For Linear integration
-LINEAR_API_KEY=your_linear_api_key
-
-# For Slack integration
-SLACK_BOT_TOKEN=your_slack_bot_token
-
-# For AI integrations
-OPENAI_API_KEY=your_openai_api_key
-GOOGLE_AI_API_KEY=your_google_ai_api_key
 
 # For database integrations
 DATABASE_URL=your_database_url
-
-# For Firecrawl integration
-FIRECRAWL_API_KEY=your_firecrawl_api_key
 `;
 
     return NextResponse.json({

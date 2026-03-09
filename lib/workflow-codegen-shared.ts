@@ -293,37 +293,9 @@ export function getStepInfo(actionType: string): {
 } {
   const stepMap: Record<string, { functionName: string; importPath: string }> =
     {
-      "Generate Text": {
-        functionName: "generateTextStep",
-        importPath: "./steps/generate-text-step",
-      },
-      "Send Email": {
-        functionName: "sendEmailStep",
-        importPath: "./steps/send-email-step",
-      },
-      "Send Slack Message": {
-        functionName: "sendSlackMessageStep",
-        importPath: "./steps/send-slack-message-step",
-      },
-      "Create Ticket": {
-        functionName: "createTicketStep",
-        importPath: "./steps/create-ticket-step",
-      },
-      "Generate Image": {
-        functionName: "generateImageStep",
-        importPath: "./steps/generate-image-step",
-      },
       "HTTP Request": {
         functionName: "httpRequestStep",
         importPath: "./steps/http-request-step",
-      },
-      Scrape: {
-        functionName: "firecrawlScrapeStep",
-        importPath: "./steps/firecrawl",
-      },
-      Search: {
-        functionName: "firecrawlSearchStep",
-        importPath: "./steps/firecrawl",
       },
     };
 

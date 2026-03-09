@@ -677,15 +677,7 @@ export const PanelInner = () => {
                 const actionType = selectedNode.data.config
                   ?.actionType as string;
                 const integrationMap = {
-                  "Send Email": "resend",
-                  "Send Slack Message": "slack",
-                  "Create Ticket": "linear",
-                  "Find Issues": "linear",
-                  "Generate Text": "ai-gateway",
-                  "Generate Image": "ai-gateway",
                   "Database Query": "database",
-                  Scrape: "firecrawl",
-                  Search: "firecrawl",
                 } as const;
 
                 const integrationType =

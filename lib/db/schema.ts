@@ -82,11 +82,7 @@ export const integrations = pgTable("integrations", {
     .notNull()
     .references(() => users.id),
   name: text("name").notNull(),
-  type: text("type")
-    .notNull()
-    .$type<
-      "resend" | "linear" | "slack" | "database" | "ai-gateway" | "firecrawl"
-    >(),
+  type: text("type").notNull().$type<"database">(),
   // biome-ignore lint/suspicious/noExplicitAny: JSONB type - encrypted credentials stored as JSON
   config: jsonb("config").notNull().$type<any>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

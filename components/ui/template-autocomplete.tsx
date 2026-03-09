@@ -90,25 +90,6 @@ const schemaToFields = (
 const getCommonFields = (node: WorkflowNode) => {
   const actionType = node.data.config?.actionType;
 
-  if (actionType === "Find Issues") {
-    return [
-      { field: "issues", description: "Array of issues found" },
-      { field: "count", description: "Number of issues" },
-    ];
-  }
-  if (actionType === "Send Email") {
-    return [
-      { field: "id", description: "Email ID" },
-      { field: "status", description: "Send status" },
-    ];
-  }
-  if (actionType === "Create Ticket") {
-    return [
-      { field: "id", description: "Ticket ID" },
-      { field: "url", description: "Ticket URL" },
-      { field: "number", description: "Ticket number" },
-    ];
-  }
   if (actionType === "HTTP Request") {
     return [
       { field: "data", description: "Response data" },
@@ -135,47 +116,6 @@ const getCommonFields = (node: WorkflowNode) => {
       { field: "rows", description: "Query result rows" },
       { field: "count", description: "Number of rows" },
     ];
-  }
-  if (actionType === "Generate Text") {
-    const aiFormat = node.data.config?.aiFormat as string | undefined;
-    const aiSchema = node.data.config?.aiSchema as string | undefined;
-
-    // If format is object and schema is defined, show schema fields
-    if (aiFormat === "object" && aiSchema) {
-      try {
-        const schema = JSON.parse(aiSchema) as SchemaField[];
-        if (schema.length > 0) {
-          return schemaToFields(schema);
-        }
-      } catch {
-        // If schema parsing fails, fall through to default fields
-      }
-    }
-
-    // Default fields for text format or when no schema
-    return [
-      { field: "text", description: "Generated text" },
-      { field: "model", description: "Model used" },
-    ];
-  }
-  if (actionType === "Generate Image") {
-    return [
-      { field: "base64", description: "Base64 image data" },
-      { field: "model", description: "Model used" },
-    ];
-  }
-  if (actionType === "Scrape") {
-    return [
-      { field: "markdown", description: "Scraped content as markdown" },
-      { field: "metadata.url", description: "Page URL" },
-      { field: "metadata.title", description: "Page title" },
-      { field: "metadata.description", description: "Page description" },
-      { field: "metadata.language", description: "Page language" },
-      { field: "metadata.favicon", description: "Favicon URL" },
-    ];
-  }
-  if (actionType === "Search") {
-    return [{ field: "web", description: "Array of search results" }];
   }
   if (node.data.type === "trigger") {
     const triggerType = node.data.config?.triggerType as string | undefined;

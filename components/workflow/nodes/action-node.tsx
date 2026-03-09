@@ -68,45 +68,17 @@ const getModelDisplayName = (modelId: string): string => {
 // Helper to get integration name from action type
 const getIntegrationFromActionType = (actionType: string): string => {
   const integrationMap: Record<string, string> = {
-    "Send Email": "Resend",
-    "Send Slack Message": "Slack",
-    "Create Ticket": "Linear",
-    "Find Issues": "Linear",
     "HTTP Request": "System",
     "Database Query": "Database",
-    "Generate Text": "AI Gateway",
-    "Generate Image": "AI Gateway",
-    Scrape: "Firecrawl",
-    Search: "Firecrawl",
     Condition: "Condition",
   };
-  return integrationMap[actionType] || "System";
+  return integrationMap[actionType] || "Plugin";
 };
 
-// Helper to detect if output is a base64 image from generateImage step
-function isBase64ImageOutput(output: unknown): output is { base64: string } {
-  return (
-    typeof output === "object" &&
-    output !== null &&
-    "base64" in output &&
-    typeof (output as { base64: unknown }).base64 === "string" &&
-    (output as { base64: string }).base64.length > 100
-  );
-}
 
 // Helper to check if an action requires an integration
 const requiresIntegration = (actionType: string): boolean => {
-  const requiresIntegrationActions = [
-    "Send Email",
-    "Send Slack Message",
-    "Create Ticket",
-    "Find Issues",
-    "Generate Text",
-    "Generate Image",
-    "Database Query",
-    "Scrape",
-    "Search",
-  ];
+  const requiresIntegrationActions = ["Database Query"];
   return requiresIntegrationActions.includes(actionType);
 };
 
@@ -118,23 +90,10 @@ const hasIntegrationConfigured = (config: Record<string, unknown>): boolean =>
 // Helper to get provider logo for action type
 const getProviderLogo = (actionType: string) => {
   switch (actionType) {
-    case "Send Email":
-      return <IntegrationIcon className="size-12" integration="resend" />;
-    case "Send Slack Message":
-      return <IntegrationIcon className="size-12" integration="slack" />;
-    case "Create Ticket":
-    case "Find Issues":
-      return <IntegrationIcon className="size-12" integration="linear" />;
     case "HTTP Request":
       return <Zap className="size-12 text-amber-300" strokeWidth={1.5} />;
     case "Database Query":
       return <Database className="size-12 text-blue-300" strokeWidth={1.5} />;
-    case "Generate Text":
-    case "Generate Image":
-      return <IntegrationIcon className="size-12" integration="vercel" />;
-    case "Scrape":
-    case "Search":
-      return <IntegrationIcon className="size-12" integration="firecrawl" />;
     case "Execute Code":
       return <Code className="size-12 text-green-300" strokeWidth={1.5} />;
     case "Condition":
@@ -246,13 +205,7 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
   const actionType = (data.config?.actionType as string) || "";
   const status = data.status;
 
-  // Check if this node has a generated image from the selected execution
   const nodeLog = executionLogs[id];
-  const hasGeneratedImage =
-    selectedExecutionId &&
-    actionType === "Generate Image" &&
-    nodeLog?.output &&
-    isBase64ImageOutput(nodeLog.output);
 
   // Handle empty action type (new node without selected action)
   if (!actionType) {
@@ -295,20 +248,6 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
   const integrationMissing =
     needsIntegration && !hasIntegrationConfigured(data.config || {});
 
-  // Get model for AI nodes
-  const getAiModel = (): string | null => {
-    if (actionType === "Generate Text") {
-      return (data.config?.aiModel as string) || "meta/llama-4-scout";
-    }
-    if (actionType === "Generate Image") {
-      return (
-        (data.config?.imageModel as string) || "google/imagen-4.0-generate"
-      );
-    }
-    return null;
-  };
-
-  const aiModel = getAiModel();
   const isDisabled = data.enabled === false;
 
   return (
@@ -339,13 +278,7 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
       <StatusBadge status={status} />
 
       <div className="flex flex-col items-center justify-center gap-3 p-6">
-        {hasGeneratedImage ? (
-          <GeneratedImageThumbnail
-            base64={(nodeLog.output as { base64: string }).base64}
-          />
-        ) : (
-          getProviderLogo(actionType)
-        )}
+        {getProviderLogo(actionType)}
         <div className="flex flex-col items-center gap-1 text-center">
           <NodeTitle className="text-base">{displayTitle}</NodeTitle>
           {displayDescription && (
@@ -353,8 +286,6 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
               {displayDescription}
             </NodeDescription>
           )}
-          {/* Model badge for AI nodes */}
-          {aiModel && <ModelBadge model={aiModel} />}
         </div>
       </div>
     </Node>
