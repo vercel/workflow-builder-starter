@@ -22,6 +22,7 @@ import { IntegrationFormDialog } from "./integration-form-dialog";
 
 // System integrations that don't have plugins
 const SYSTEM_INTEGRATION_LABELS: Record<string, string> = {
+  "ai-gateway": "AI Gateway",
   database: "Database",
 };
 
@@ -130,11 +131,7 @@ export function IntegrationsManager({
               <div className="flex items-center gap-3">
                 <IntegrationIcon
                   className="size-8"
-                  integration={
-                    integration.type === "ai-gateway"
-                      ? "vercel"
-                      : integration.type
-                  }
+                  integration={integration.type === "ai-gateway" ? "vercel" : integration.type}
                 />
                 <div>
                   <p className="font-medium text-sm">{integration.name}</p>

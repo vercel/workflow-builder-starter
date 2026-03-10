@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import postgres from "postgres";
 import { auth } from "@/lib/auth";
 import { getIntegration } from "@/lib/db/integrations";
+import type { IntegrationType } from "@/lib/types/integration";
 
 export type TestConnectionResult = {
   status: "success" | "error";
@@ -40,7 +41,21 @@ export async function POST(
       );
     }
 
-    const result = await testDatabaseConnection(integration.config.url);
+    const testers: Record<IntegrationType, () => Promise<TestConnectionResult>> = {
+      "ai-gateway": () => testAiGatewayConnection(integration.config.apiKey),
+      database: () => testDatabaseConnection(integration.config.url),
+    };
+
+    const testConnection = testers[integration.type];
+
+    if (!testConnection) {
+      return NextResponse.json(
+        { error: `Unsupported integration type: ${integration.type}` },
+        { status: 400 }
+      );
+    }
+
+    const result = await testConnection();
 
     return NextResponse.json(result);
   } catch (error) {
@@ -52,6 +67,42 @@ export async function POST(
       },
       { status: 500 }
     );
+  }
+}
+
+async function testAiGatewayConnection(
+  apiKey?: string
+): Promise<TestConnectionResult> {
+  if (!apiKey) {
+    return {
+      status: "error",
+      message: "AI Gateway API key is required",
+    };
+  }
+
+  try {
+    const response = await fetch("https://ai-gateway.vercel.sh/v1/models", {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      return {
+        status: "error",
+        message: "AI Gateway connection failed",
+      };
+    }
+
+    return {
+      status: "success",
+      message: "AI Gateway connection successful",
+    };
+  } catch {
+    return {
+      status: "error",
+      message: "AI Gateway connection failed",
+    };
   }
 }
 

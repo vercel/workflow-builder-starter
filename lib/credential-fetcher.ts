@@ -27,6 +27,16 @@ const SYSTEM_CREDENTIAL_MAPPERS: Record<
   string,
   (config: IntegrationConfig) => WorkflowCredentials
 > = {
+  "ai-gateway": (config) => {
+    const creds: WorkflowCredentials = {};
+    if (config.apiKey) {
+      creds.AI_GATEWAY_API_KEY = config.apiKey;
+    }
+    if (config.baseUrl) {
+      creds.AI_GATEWAY_BASE_URL = config.baseUrl;
+    }
+    return creds;
+  },
   database: (config) => {
     const creds: WorkflowCredentials = {};
     if (config.url) {

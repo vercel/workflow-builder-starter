@@ -46,8 +46,9 @@ type IntegrationFormData = {
 };
 
 // System integrations that don't have plugins
-const SYSTEM_INTEGRATION_TYPES: IntegrationType[] = ["database"];
+const SYSTEM_INTEGRATION_TYPES: IntegrationType[] = ["ai-gateway", "database"];
 const SYSTEM_INTEGRATION_LABELS: Record<string, string> = {
+  "ai-gateway": "AI Gateway",
   database: "Database",
 };
 
@@ -72,7 +73,7 @@ export function IntegrationFormDialog({
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<IntegrationFormData>({
     name: "",
-    type: preselectedType || "database",
+    type: preselectedType || "ai-gateway",
     config: {},
   });
 
@@ -86,7 +87,7 @@ export function IntegrationFormDialog({
     } else {
       setFormData({
         name: "",
-        type: preselectedType || "database",
+        type: preselectedType || "ai-gateway",
         config: {},
       });
     }
@@ -134,6 +135,35 @@ export function IntegrationFormDialog({
 
   const renderConfigFields = () => {
     // Handle system integrations with hardcoded fields
+    if (formData.type === "ai-gateway") {
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="apiKey">AI Gateway API Key</Label>
+            <Input
+              id="apiKey"
+              onChange={(e) => updateConfig("apiKey", e.target.value)}
+              placeholder="vg_..."
+              type="password"
+              value={formData.config.apiKey || ""}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="baseUrl">Base URL (Optional)</Label>
+            <Input
+              id="baseUrl"
+              onChange={(e) => updateConfig("baseUrl", e.target.value)}
+              placeholder="https://ai-gateway.vercel.sh/v1"
+              value={formData.config.baseUrl || ""}
+            />
+            <p className="text-muted-foreground text-xs">
+              Leave blank to use the default Vercel AI Gateway endpoint.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     if (formData.type === "database") {
       return (
         <div className="space-y-2">

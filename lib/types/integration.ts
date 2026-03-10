@@ -9,11 +9,12 @@
  * 2. Add a system integration to SYSTEM_INTEGRATION_TYPES in discover-plugins.ts
  * 3. Run: pnpm discover-plugins
  *
- * Generated types: database
+ * Generated types: ai-gateway, database
  */
 
 // Integration type union - plugins + system integrations
 export type IntegrationType =
+  | "ai-gateway"
   | "database";
 
 // Generic config type - plugins define their own keys via formFields[].configKey
